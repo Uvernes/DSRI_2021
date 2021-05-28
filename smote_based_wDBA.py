@@ -3,7 +3,6 @@ import math
 import numpy
 from tslearn.barycenters import dtw_barycenter_averaging_petitjean
 from tslearn.metrics import cdist_dtw
-from tslearn.utils import to_pyts_dataset
 
 
 def smote_based_weighted_dba(X, N, k=None, distances=None):
