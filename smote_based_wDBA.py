@@ -107,3 +107,16 @@ synthetic_samples = smote_based_weighted_dba(X, 100, 2)
 print("Synthetic uni-variate time series:")
 for i in synthetic_samples:
     print(i)
+    
+    
+"""
+Sample output:
+
+>> Synthetic uni-variate time series:
+>> [1.0, 1.0, 3.0]
+>> [1.0, 2.0, 1.0]
+>> [1.0, 2.691956557219443, 2.3839131144388856]
+>> [1.0, 2.4404417811400174]
+>> [1.0, 1.0, 1.0, 1.17775962614494, 1.17775962614494, 1.17775962614494, 1.17775962614494, 1.17775962614494, 1.0, 1.0, 1.0, 1.0]
+
+"""
