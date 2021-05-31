@@ -4,7 +4,7 @@ import math
 """
 Input
 -----
-R - 3 by 3 matrix for which we want to find its nearest rotation matrix
+R - 3 by 3 matrix we want to find nearest rotation matrix for
 
 Output
 ------
