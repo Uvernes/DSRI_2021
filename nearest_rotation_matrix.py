@@ -4,13 +4,11 @@ import math
 """
 Input
 -----
-
 R - 3 by 3 matrix for which we want to find its nearest rotation matrix
 
 Output
 ------
-
-3 by 3 matrix corresponding to the nearest rotation matrix
+Nearest rotation matrix
 
 """
 
