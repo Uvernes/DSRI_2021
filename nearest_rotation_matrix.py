@@ -47,11 +47,11 @@ def exact_nearest_rotation_matrix(R):
 
 
 # --------------- Testing -----------------------#
-tMatrix = np.array([[0.1959, -0.3765, -0.7937],
-                    [0.7458, 0.5011, -0.0536],
-                    [0.4643, -0.6459, 0.4210]])
+# tMatrix = np.array([[0.1959, -0.3765, -0.7937],
+#                     [0.7458, 0.5011, -0.0536],
+#                     [0.4643, -0.6459, 0.4210]])
 
-closest = exact_nearest_rotation_matrix(tMatrix)
-print(closest)
-# Matrix multiplication below is eye(3), as expected
-print(np.dot(closest, closest.transpose()))
+# closest = exact_nearest_rotation_matrix(tMatrix)
+# print(closest)
+# # Matrix multiplication below is eye(3), as expected
+# print(np.dot(closest, closest.transpose()))
