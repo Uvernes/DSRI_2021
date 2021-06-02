@@ -22,7 +22,7 @@ print("Synthetic time series before fixing R matrices (only printing values corr
 for t_series in synthetic_samples:
     print(t_series[0:2])
 
-print("Check matrix multiplication of R'*R is eye(3), for one specific example (before fixing)")
+print("Check matrix multiplication of R'*R, for one specific example (before fixing)")
 product = np.dot(list_to_matrix(synthetic_samples[1][1])[0:3, 0:3], list_to_matrix(synthetic_samples[0][0])[0:3, 0:3].transpose())
 np.savetxt(sys.stdout, product, '%.5f')
 
