@@ -9,23 +9,6 @@ import numpy as np
 import sys
 
 
-"""
-my_first_time_series = [1, 1, 1, 1, 3, 3, 3, 4, 4, 4, 4, 2, 2, 2]
-formatted_time_series = to_time_series(my_first_time_series)
-print(formatted_time_series.shape)
-t_2 = [1, 3, 3, 1]
-
-X = [my_first_time_series, t_2]
-
-bar = dtw_barycenter_averaging_petitjean(X, 4)
-
-print(bar)
-
-distances = cdist_dtw(X)
-
-print(distances)
-"""
-
 # ------ Testing example of creating synthetic time series using novice data -------- #
 
 tic = time.perf_counter()
