@@ -42,15 +42,15 @@ def exact_nearest_rotation_matrix(R):
     b1 = (a0+a2*((a2**2) - 2*a1))/dem
     b2 = a2/dem
 
-    U = b2*A*A -b1*A +b0*np.eye(3)
+    U = np.dot(np.dot(b2, A), A) - np.dot(b1, A) + np.dot(b0, np.eye(3))
 
     return np.dot(R, U)
 
 
 # --------------- Testing -----------------------#
-# tMatrix = np.array([[0.1959, -0.3765, -0.7937],
-#                     [0.7458, 0.5011, -0.0536],
-#                     [0.4643, -0.6459, 0.4210]])
+# tMatrix = np.array([[0.74359, -0.66199, 0.08425],
+#                     [0.21169, 0.35517, 0.91015],
+#                     [-0.63251, -0.65879, 0.40446]])
 #
 # closest = exact_nearest_rotation_matrix(tMatrix)
 # print("Matrix: ")
@@ -60,7 +60,7 @@ def exact_nearest_rotation_matrix(R):
 # # Matrix multiplication below is eye(3), as expected
 # print("Matrix multiplication:")
 # np.savetxt(sys.stdout, np.dot(closest, closest.transpose()), '%.5f')
-#
+
 # print("---------------")
 # matrix = np.array([[1, 2, 3], [4, 5, 6]])
 # print(matrix)
