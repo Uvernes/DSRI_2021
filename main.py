@@ -45,16 +45,13 @@ def main():
 
     # Write synthetic data to MHA files
     write_dataset_to_mha_files(synthetic_needle_tip_to_ref, synthetic_timestamps, "NeedleTipToReference",
-                               SYNTHETIC_DATA_PATH)
+                               SYNTHETIC_DATA_PATH, clear_existing_synthetic_directories=True)
     write_dataset_to_mha_files(synthetic_probe_to_ref, synthetic_timestamps, "ProbeToReference",
                                SYNTHETIC_DATA_PATH)
 
     toc = time.perf_counter()
     print("\nMinutes elapsed: %.2f" % ((toc - tic) / 60))  # Output: ~10.86 minutes for entire novice set
 
-# NEXT STEPS:
-# 1) Apply jittering
-# 2) Discuss with Matthew
 
 main()
 
