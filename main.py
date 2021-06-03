@@ -4,57 +4,97 @@ from tslearn.metrics import cdist_dtw
 from data_extraction_and_storage_methods import *
 from smote_based_wDBA import *
 from conversion_and_utility_methods import *
+from timestamp_methods import create_synthetic_timestamps
 import time
+import math
 import numpy as np
 import sys
 
 
-"""
-my_first_time_series = [1, 1, 1, 1, 3, 3, 3, 4, 4, 4, 4, 2, 2, 2]
-formatted_time_series = to_time_series(my_first_time_series)
-print(formatted_time_series.shape)
-t_2 = [1, 3, 3, 1]
+PROPORTION_OF_DATASET = 0.1
+SYNTHETIC_DATA_PATH = r"C:\Users\uvern\Dropbox\My PC (LAPTOP-554U8A6N)\Documents\DSRI\Data\usneedle_data" \
+                      r"\usneedle_data\SyntheticData\NoviceData"
 
-X = [my_first_time_series, t_2]
+# Running main creates synthetic time series using both NeedleTipToReference and ProbeToReference novice data, and it
+# writes this data to a directory
 
-bar = dtw_barycenter_averaging_petitjean(X, 4)
 
-print(bar)
+def main():
 
-distances = cdist_dtw(X)
+    tic = time.perf_counter()
 
-print(distances)
-"""
+    # Extract datasets
+    novice_set_needle_tip_to_ref, timestamps_set = get_subset_of_dataset("Novice", "NeedleTipToReference")
+    novice_set_probe_to_ref, _ = get_subset_of_dataset("Novice", "ProbeToReference")
+    size = math.floor(PROPORTION_OF_DATASET * len(novice_set_needle_tip_to_ref))
+    novice_set_needle_tip_to_ref = novice_set_needle_tip_to_ref[0:size]
+    novice_set_probe_to_ref = novice_set_probe_to_ref[0:size]
+    timestamps_set = timestamps_set[0:size]
+
+    # Creating synthetic time series
+    synthetic_needle_tip_to_ref = smote_based_weighted_dba(novice_set_needle_tip_to_ref, N=100)
+    synthetic_probe_to_ref = smote_based_weighted_dba(novice_set_probe_to_ref, N=100)
+
+    # Fix all rotation matrices
+    for i in range(len(synthetic_needle_tip_to_ref)):
+        fix_rotation_matrices(synthetic_needle_tip_to_ref[i])
+        fix_rotation_matrices(synthetic_probe_to_ref[i])
+
+    # Synthetic timestamps (assumption - dif. sequence types for the same trial share the same timestamp values)
+    synthetic_timestamps = create_synthetic_timestamps(synthetic_needle_tip_to_ref, timestamps_set)
+
+    # Write synthetic data to MHA files
+    write_dataset_to_mha_files(synthetic_needle_tip_to_ref, synthetic_timestamps, "NeedleTipToReference",
+                               SYNTHETIC_DATA_PATH)
+    write_dataset_to_mha_files(synthetic_probe_to_ref, synthetic_timestamps, "ProbeToReference",
+                               SYNTHETIC_DATA_PATH)
+
+    toc = time.perf_counter()
+    print("\nMinutes elapsed: %.2f" % ((toc - tic) / 60))  # Output: ~10.86 minutes for entire novice set
+
+# NEXT STEPS:
+# 1) Apply jittering
+# 2) Discuss with Matthew
+
+main()
+
 
 # ------ Testing example of creating synthetic time series using novice data -------- #
 
-tic = time.perf_counter()
-
-# Only looking at 5 novice examples
-novice_set = get_subset_of_dataset("Novice", "NeedleTipToReference-Sequence.mha")[0:5]
-# distances = cdist_dtw(novice_set)
-# print(distances)
-synthetic_samples = smote_based_weighted_dba(novice_set, 100, 1)
-
-print("Synthetic time series before fixing R matrices (only printing values corresponding to first 2 time stamps):")
-for t_series in synthetic_samples:
-    print(t_series[0:2])
-
-print("Check matrix multiplication of R'*R, for one specific example (before fixing)")
-product = np.dot(list_to_matrix(synthetic_samples[1][1])[0:3, 0:3], list_to_matrix(synthetic_samples[1][1])[0:3, 0:3].transpose())
-np.savetxt(sys.stdout, product, '%.5f')
-
-print("\nSynthetic time series after fixing R matrices (only printing values corresponding to first 2 time stamps):")
-for i in range(len(synthetic_samples)):
-    fix_rotation_matrices(synthetic_samples[i])
-    print(synthetic_samples[i][0:2])
-
-print("Check matrix multiplication of R'*R is eye(3), for one specific example (after fixing)")
-product = np.dot(list_to_matrix(synthetic_samples[1][1])[0:3, 0:3], list_to_matrix(synthetic_samples[1][1])[0:3, 0:3].transpose())
-np.savetxt(sys.stdout, product, '%.5f')
-
-toc = time.perf_counter()
-print("\nMinutes elapsed: %.2f" % ((toc - tic) / 60))  # Output: ~10.86 minutes for entire novice set
+# tic = time.perf_counter()
+#
+# novice_set, timestamps_set = get_subset_of_dataset("Novice", "NeedleTipToReference")
+# # Only looking at 5 novice examples
+# novice_set = novice_set[0:5]
+# timestamps_set = timestamps_set[0:5]
+# # distances = cdist_dtw(novice_set)
+# # print(distances)
+# synthetic_samples = smote_based_weighted_dba(novice_set, 100, 1)
+#
+# print("Synthetic time series before fixing R matrices (only printing values corresponding to first 2 time stamps):")
+# for t_series in synthetic_samples:
+#     print(t_series[0:2])
+#
+# print("Check matrix multiplication of R'*R, for one specific example (before fixing)")
+# product = np.dot(list_to_matrix(synthetic_samples[1][1])[0:3, 0:3], list_to_matrix(synthetic_samples[1][1])[0:3, 0:3].transpose())
+# np.savetxt(sys.stdout, product, '%.5f')
+#
+# print("\nSynthetic time series after fixing R matrices (only printing values corresponding to first 2 time stamps):")
+# for i in range(len(synthetic_samples)):
+#     fix_rotation_matrices(synthetic_samples[i])
+#     print(synthetic_samples[i][0:2])
+#
+# print("Check matrix multiplication of R'*R is eye(3), for one specific example (after fixing)")
+# product = np.dot(list_to_matrix(synthetic_samples[1][1])[0:3, 0:3], list_to_matrix(synthetic_samples[1][1])[0:3, 0:3].transpose())
+# np.savetxt(sys.stdout, product, '%.5f')
+#
+# print("\nSynthetic timestamps for each of our synthetic time series: ")
+# synthetic_timestamps_set = create_synthetic_timestamps(synthetic_samples, timestamps_set)
+# for timestamps in synthetic_timestamps_set:
+#     print(timestamps)
+#
+# toc = time.perf_counter()
+# print("\nMinutes elapsed: %.2f" % ((toc - tic) / 60))  # Output: ~10.86 minutes for entire novice set
 
 """
 Sample output:
@@ -84,3 +124,15 @@ Sample output:
 >> Minutes elapsed: 0.03
 
 """
+
+# Potential idea - needs to be tweaked
+# def generate_and_store_synthetic_samples(skill_level, sequence_type, proportion_of_dataset, shuffleIndices=None):
+#
+#     # Put in a better location afterwards
+#     # - shuffle indices lets you get a random subset of dataset. But must be passed in. Lets us reuse shuffling
+#     # for multiple sequence types
+#
+#     novice_set, timestamps_set = get_subset_of_dataset("Novice", "NeedleTipToReference")
+
+
+# ------- Code for generating synthetic time series using novice data ------- #

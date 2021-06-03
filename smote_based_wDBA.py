@@ -13,7 +13,7 @@ def smote_based_weighted_dba(X, N, k=None, distances=None, multivariate=True):
     ------
 
      X : Dataset of time series (uni or multi-variate), all belonging to the same class.
-        -Represented as a multi-dim list: outer list stores the time series, inner lists represent individual time
+        -Represented as a multi-dim list: outer list stores all the time series, inner lists represent individual time
          series
 
      N : (int)N/100 is the number of synthetic samples to create per time series in X (i.e amount of SMOTE-ing).

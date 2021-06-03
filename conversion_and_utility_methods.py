@@ -26,7 +26,17 @@ Note: Returns a new list (rather than modifying in-place)
 def fix_rotation_matrix(t_list):
 
     t_matrix = list_to_matrix(t_list)
+    # print("\nMatrix before:")
+    # np.savetxt(sys.stdout, t_matrix, '%.5f')
+    # print("Output from function:")
+    # np.savetxt(sys.stdout, exact_nearest_rotation_matrix(t_matrix[0:3, 0:3]), '%.5f')
     t_matrix[0:3, 0:3] = exact_nearest_rotation_matrix(t_matrix[0:3, 0:3])
+    # print("Matrix after:")
+    # np.savetxt(sys.stdout, t_matrix, '%.5f')
+    # print("tranpose of R:")
+    # np.savetxt(sys.stdout, t_matrix[0:3,0:3].transpose(), '%.5f')
+    # print("Check product:")
+    # np.savetxt(sys.stdout, np.dot(t_matrix[0:3,0:3], t_matrix[0:3,0:3].transpose()), '%.5f')
     return matrix_to_list(t_matrix)
 
 
