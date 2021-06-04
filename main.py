@@ -7,6 +7,7 @@ from conversion_and_utility_methods import *
 from timestamp_methods import create_synthetic_timestamps
 import time
 import math
+from jittering import apply_jittering_to_dataset
 import numpy as np
 import sys
 
@@ -31,7 +32,7 @@ def main():
     novice_set_probe_to_ref = novice_set_probe_to_ref[0:size]
     timestamps_set = timestamps_set[0:size]
 
-    # Creating synthetic time series
+    # Creating synthetic time series using SMOTE wDBA
     synthetic_needle_tip_to_ref = smote_based_weighted_dba(novice_set_needle_tip_to_ref, N=100)
     synthetic_probe_to_ref = smote_based_weighted_dba(novice_set_probe_to_ref, N=100)
 
@@ -39,6 +40,10 @@ def main():
     for i in range(len(synthetic_needle_tip_to_ref)):
         fix_rotation_matrices(synthetic_needle_tip_to_ref[i])
         fix_rotation_matrices(synthetic_probe_to_ref[i])
+
+    # Create additional synthetic time series by applying jittering
+    synthetic_needle_tip_to_ref += apply_jittering_to_dataset(synthetic_needle_tip_to_ref, num_jitters_per_sample=2)
+    synthetic_probe_to_ref += apply_jittering_to_dataset(synthetic_probe_to_ref, num_jitters_per_sample=2)
 
     # Synthetic timestamps (assumption - dif. sequence types for the same trial share the same timestamp values)
     synthetic_timestamps = create_synthetic_timestamps(synthetic_needle_tip_to_ref, timestamps_set)
@@ -50,7 +55,16 @@ def main():
                                SYNTHETIC_DATA_PATH)
 
     toc = time.perf_counter()
-    print("\nMinutes elapsed: %.2f" % ((toc - tic) / 60))  # Output: ~10.86 minutes for entire novice set
+    print("\nMinutes elapsed: %.2f" % ((toc - tic) / 60))
+    # Output: ~ 0.34 minutes for 10% of novice set
+    #         ~ 26.88 minutes for entire dataset
+
+
+# NEXT STEPS:
+# 1) Apply jittering
+# 2) Discuss with Matthew
+# 3) Creating synthetic samples would be much quicker if we were to partition dataset into subsets (e.g into 10-split)
+#   -Look more into this
 
 
 main()
