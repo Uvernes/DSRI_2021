@@ -60,13 +60,6 @@ def main():
     #         ~ 26.88 minutes for entire dataset
 
 
-# NEXT STEPS:
-# 1) Apply jittering
-# 2) Discuss with Matthew
-# 3) Creating synthetic samples would be much quicker if we were to partition dataset into subsets (e.g into 10-split)
-#   -Look more into this
-
-
 main()
 
 
