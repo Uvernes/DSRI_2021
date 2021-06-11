@@ -157,7 +157,7 @@ def main():
     # print(y_pred)
     y_pred = np.argmax(y_pred, axis=1)  # changes predictions to be single outputs, 0 or 1
 
-    # Issue: all predictions are experts. Likely due to data becoming too skewed after window slicing
+    # Issue: all predictions are experts...
 
     # ---------- DEBUGGING ----------- #
     print("\nAfter making predictions...")
@@ -190,9 +190,3 @@ def main():
 
 
 main()
-
-# Next steps:
-# 0) Upload to github
-# 1) Discuss with others. Model does not seem to work well AT ALL (always predicts novice if no data augmentation given)
-# 2) Discuss with Matthew
-# 3) Clean up code
