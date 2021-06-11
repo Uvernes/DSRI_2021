@@ -1,9 +1,9 @@
 from tslearn.utils import to_time_series
 from tslearn.barycenters import dtw_barycenter_averaging_petitjean
 from tslearn.metrics import cdist_dtw
-from data_extraction_and_storage_methods import *
+from utility.data_extraction_and_storage_methods import *
 from smote_based_wDBA import *
-from conversion_and_utility_methods import *
+from utility.conversion_methods import *
 from timestamp_methods import create_synthetic_timestamps
 import time
 import math
@@ -12,29 +12,30 @@ import numpy as np
 import sys
 
 
-PROPORTION_OF_DATASET = 0.1
+PROPORTION_OF_DATASET = 0.05
+DIR_PATH = r"C:\Users\uvern\Dropbox\My PC (LAPTOP-554U8A6N)\Documents\DSRI\Data\usneedle_data\usneedle_data"
 SYNTHETIC_DATA_PATH = r"C:\Users\uvern\Dropbox\My PC (LAPTOP-554U8A6N)\Documents\DSRI\Data\usneedle_data" \
-                      r"\usneedle_data\SyntheticData\NoviceData"
+                      r"\usneedle_data\SyntheticData\NoviceData\Entire_NeedleAndProbe_N200_k5"
 
 # Running main creates synthetic time series using both NeedleTipToReference and ProbeToReference novice data, and it
 # writes this data to a directory
 
 
-def main():
+def run_test():
 
     tic = time.perf_counter()
 
     # Extract datasets
-    novice_set_needle_tip_to_ref, timestamps_set = get_subset_of_dataset("Novice", "NeedleTipToReference")
-    novice_set_probe_to_ref, _ = get_subset_of_dataset("Novice", "ProbeToReference")
+    novice_set_needle_tip_to_ref, timestamps_set = get_subset_of_dataset(DIR_PATH, "Novice", "NeedleToReference")
+    novice_set_probe_to_ref, _ = get_subset_of_dataset(DIR_PATH, "Novice", "ProbeToReference")
     size = math.floor(PROPORTION_OF_DATASET * len(novice_set_needle_tip_to_ref))
     novice_set_needle_tip_to_ref = novice_set_needle_tip_to_ref[0:size]
     novice_set_probe_to_ref = novice_set_probe_to_ref[0:size]
     timestamps_set = timestamps_set[0:size]
 
     # Creating synthetic time series using SMOTE wDBA
-    synthetic_needle_tip_to_ref = smote_based_weighted_dba(novice_set_needle_tip_to_ref, N=100)
-    synthetic_probe_to_ref = smote_based_weighted_dba(novice_set_probe_to_ref, N=100)
+    synthetic_needle_tip_to_ref = smote_based_weighted_dba(novice_set_needle_tip_to_ref, N=200, k=5)
+    synthetic_probe_to_ref = smote_based_weighted_dba(novice_set_probe_to_ref, N=200, k=5)
 
     # Fix all rotation matrices
     for i in range(len(synthetic_needle_tip_to_ref)):
@@ -49,7 +50,7 @@ def main():
     synthetic_timestamps = create_synthetic_timestamps(synthetic_needle_tip_to_ref, timestamps_set)
 
     # Write synthetic data to MHA files
-    write_dataset_to_mha_files(synthetic_needle_tip_to_ref, synthetic_timestamps, "NeedleTipToReference",
+    write_dataset_to_mha_files(synthetic_needle_tip_to_ref, synthetic_timestamps, "NeedleToReference",
                                SYNTHETIC_DATA_PATH, clear_existing_synthetic_directories=True)
     write_dataset_to_mha_files(synthetic_probe_to_ref, synthetic_timestamps, "ProbeToReference",
                                SYNTHETIC_DATA_PATH)
@@ -60,7 +61,14 @@ def main():
     #         ~ 26.88 minutes for entire dataset
 
 
-main()
+# NEXT STEPS:
+# 1) Apply jittering
+# 2) Discuss with Matthew
+# 3) Creating synthetic samples would be much quicker if we were to partition dataset into subsets (e.g into 10-split)
+#   -Look more into this
+
+
+run_test()
 
 
 # ------ Testing example of creating synthetic time series using novice data -------- #

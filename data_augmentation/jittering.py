@@ -1,7 +1,7 @@
 import sys
 import numpy as np
 from scipy.spatial.transform import Rotation
-from conversion_and_utility_methods import *
+from utility.conversion_methods import *
 
 
 def generate_random_transform_matrix(rotation_magnitude, translation_magnitude):
