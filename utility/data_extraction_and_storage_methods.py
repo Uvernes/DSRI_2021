@@ -1,18 +1,38 @@
 import os
 import shutil
 import random
+import model_related.classes
 
 SKILL_LEVELS = ["Novice", "Expert"]
 SEQUENCE_TYPES = ["ImageToReference", "NeedleTipToImage", "NeedleTipToReference", "NeedleToProbe",
                   "NeedleToReference", "ProbeToReference"]
 SEQUENCES_WITH_SEQ_EXTENSION = SEQUENCE_TYPES[-3:]
+SURGERY_TYPES = ["IP", "OOP"]
+# line below used for testing purposes
+DATASET_PATH = r"C:\Users\uvern\Dropbox\My PC (LAPTOP-554U8A6N)\Documents\DSRI\Data\usneedle_data\SplitManually_Score20_OnlyBF"
+
+
+def add_surgery_type_labels_to_novice_data(directory_path):
+    directory_path += "\\NoviceData"
+    novice_directories = [ele for ele in os.listdir(directory_path) if os.path.isdir(directory_path + "\\" + ele)]
+    for novice in novice_directories:
+        novice_num = int(novice.split("_")[0])
+        # Even numbers performed OOP surgeries, odd numbers performed IP ones
+        surgery_type = "OOP" if (novice_num % 2 == 0) else "IP"
+        # Checks if directory already renamed
+        if surgery_type in novice:
+            continue
+        first_dash_index = novice.find("-")
+        new_name = novice[0:first_dash_index] + "-" + surgery_type + novice[first_dash_index:]
+        os.rename(directory_path + "\\" + novice, directory_path + "\\" + new_name)
 
 
 def get_single_time_series_from_file(filename):
 
     """
-    This method extracts the time series data from a single MHA file and stores it in a 2D list.
-    Note: Last
+    This method extracts the time series data from a single MHA file and stores it in a 2D list. Also extracts the
+    timestamps.
+
     Parameters
     ----------
     filename - mha file to extract time series from. Currently, NeedleAndProbeToReference files are not supported
@@ -69,7 +89,7 @@ def get_filename(sequence_type):
     return sequence_type + "-Sequence.mha"
 
 
-def get_subset_of_dataset(directory, skill_level, sequence_type):
+def get_subset_of_dataset(directory, skill_level, sequence_type, surgery_type=None):
 
     """
     This method extracts all time series data available for a particular skill level (e.g novice), including the timestamps.
@@ -84,6 +104,8 @@ def get_subset_of_dataset(directory, skill_level, sequence_type):
 
     sequence_type - Type of sequence being considered (e.g NeedleTipToReference). Do not include extensions (e.g .seq.mha)
                     or the '-Sequence' term
+
+    surgery_type - Type of surgery to extract data from (i.e IP or OOP). If none, extracts data from all surgery types.
 
     returns
     ------
@@ -105,8 +127,10 @@ def get_subset_of_dataset(directory, skill_level, sequence_type):
     for dir in directories:
         if "sqbr" in dir:
             continue
+        if (surgery_type is not None) and (surgery_type not in dir):
+            continue
         # print(dir)
-        # print(START_PATH + "\\" + skill_level + "Data" + "\\" + dir + "\\" + sequence_type)
+        # print(directory + "\\" + skill_level + "Data" + "\\" + dir + "\\" + sequence_type)
         t_series, timestamps = get_single_time_series_from_file(directory + "\\" + skill_level + "Data" + "\\" + dir + "\\" + filename)
         dataset.append(t_series)
         timestamps_set.append(timestamps)
@@ -122,16 +146,39 @@ def load_dataset(directory, sequence_type):
                     or the '-Sequence' term
     Returns
     -------
-    Two lists with 2 elements each, corresponding to each skill level (novice and expert, respectively).
-    -In the first list, each element is a list containing all time series data for a particular skill level.
-    Note that all time series are lists (not np arrays)
-    -In the second, each element is a list containing all the timestamps for all the time series of a particular
-     skill level
+    A ParticipantsStorage object, which stores all participants and their surgeries data.
     """
-    novices, novices_timestamps = get_subset_of_dataset(directory, "Novice", sequence_type)
-    experts, expert_timestamps = get_subset_of_dataset(directory, "Expert", sequence_type)
+    dataset = model_related.classes.ParticipantsStorage()
 
-    return [novices, experts], [novices_timestamps, expert_timestamps]
+    if sequence_type not in SEQUENCE_TYPES:
+        return dataset
+
+    for skill_level in SKILL_LEVELS:
+
+        sub_directory = directory + "\\" + skill_level + "Data"
+        surgery_directories = os.listdir(sub_directory)
+
+        for dir in surgery_directories:
+
+            if "sqbr" in dir:
+                continue
+
+            participant_name = dir.split("_")[0]
+
+            # Finds type of surgery
+            surgery_type = ""
+            for s_type in SURGERY_TYPES:
+                if s_type in dir:
+                    surgery_type = s_type
+                    break
+
+            filename = get_filename(sequence_type)
+            time_series, timestamps = get_single_time_series_from_file(sub_directory + "\\" + dir + "\\" + filename)
+
+            dataset.add_surgery(participant_name, time_series, skill_level, surgery_type, sequence_type, timestamps)
+
+    return dataset
+
 
 
 def write_time_series_to_mha_file(time_series, timestamps, sequence_type, path):
@@ -255,16 +302,33 @@ def write_dataset_to_mha_files(dataset, timestamps_set, sequence_type, directory
 # print(timestamps)
 # print("Number of timestamps: ", len(timestamps))
 #
-# # Reading in entire novice dataset
+# Reading in entire novice dataset
 # print("\nReading in all novice time series for needle tip to reference data...")
-# dataset, timestamps_set = get_subset_of_dataset("Novice", "NeedleTipToReference")
+# dataset, timestamps_set = get_subset_of_dataset(DATASET_PATH, "Novice", "NeedleTipToReference")
 # print("Size of dataset: ", len(dataset))
 # print("\nPrinting out a randomly selected time series from dataset (and timestamps):")
 # index = random.randint(0, len(dataset) - 1)
 # print(dataset[index])
 # print(timestamps_set[index])
 # print("Number of timestamps: ", len(timestamps_set[index]))
-#
+
+# loading in entire dataset
+# dataset = load_dataset(DATASET_PATH, "NeedleTipToReference")
+# print("Printing out one of participant #1 's time series :")
+# print(dataset.participants["1"].surgeries[0].time_series)
+# print("Skill level -", dataset.participants["1"].surgeries[0].skill_level)
+# print("Surgery type -", dataset.participants["1"].surgeries[0].surgery_type)
+# print("Number of surgeries for participant #23:", len(dataset.participants["23"].surgeries))
+# print("Number of novice IP surgeries for participant #23:", dataset.participants["23"].surgeries_stats["experts_IP"])
+# print("Number of participants:", len(dataset.participants))
+# print("Number of surgeries stored in dataset:", dataset.surgeries_stats["surgeries"])
+# print("Number of novices and experts, respectively: ",
+#       dataset.surgeries_stats["novices"], "|", dataset.surgeries_stats["experts"])
+# print("Number of Novice IP, OOP surgeries, Expert IP, OOP surgeries, respectively:")
+# print(dataset.surgeries_stats["novices_IP"], "|", dataset.surgeries_stats["novices_OOP"], "|",
+#       dataset.surgeries_stats["experts_IP"], "|", dataset.surgeries_stats["experts_OOP"])
+
+
 # # Writing one time series to an MHA file
 # print("\nWriting to an mha file using example_time_series...")
 # path = START_PATH + r"\SyntheticData\ExampleData"
@@ -273,5 +337,6 @@ def write_dataset_to_mha_files(dataset, timestamps_set, sequence_type, directory
 # # Writing entire dataset to synthetic data directory
 # write_dataset_to_mha_files(dataset, timestamps_set, "NeedleTipToReference", path, True, False)
 
-
+# Renaming novice directories
+# add_surgery_type_labels_to_novice_data(DATASET_PATH)
 

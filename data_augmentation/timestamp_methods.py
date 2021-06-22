@@ -2,6 +2,31 @@ from statistics import mean, stdev
 from numpy import random
 import math
 
+
+def summary_stats_of_timestamp_lengths(timestamps_dict):
+    """
+    :param timestamps: Dictionary contain timestamps info for all time series in dataset, split into skill levels,
+                       and then into surgery type
+    :return: average length of a time series, shortest time series, and longest time series, respectively
+    """
+    longest = -math.inf
+    shortest = math.inf
+    sum = 0
+    num_time_series = 0
+    for skill_level in timestamps_dict:
+        for surgery_type in timestamps_dict[skill_level]:
+            for timestamps in timestamps_dict[skill_level][surgery_type]:
+                sum += len(timestamps)
+                num_time_series += 1
+                if len(timestamps) > longest:
+                    longest = len(timestamps)
+                if len(timestamps) < shortest:
+                    shortest = len(timestamps)
+    return sum / num_time_series, shortest, longest
+
+
+# METHODS BELOW NEED TO BE UPDATED TO WORK WITH TIMESTAMPS DICTIONARY INSTEAD
+
 """
 Parameters
 -----------

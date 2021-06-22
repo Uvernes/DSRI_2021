@@ -56,7 +56,7 @@ def run_test():
                                SYNTHETIC_DATA_PATH)
 
     toc = time.perf_counter()
-    print("\nMinutes elapsed: %.2f" % ((toc - tic) / 60))
+    print("\nHours elapsed: %.2f" % ((toc - tic) / 60 / 60))
     # Output: ~ 0.34 minutes for 10% of novice set
     #         ~ 26.88 minutes for entire dataset
 

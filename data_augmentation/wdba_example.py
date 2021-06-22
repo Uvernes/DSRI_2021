@@ -29,10 +29,22 @@ synthetic = dtw_barycenter_averaging_petitjean(dataset, barycenter_size=size, we
 synthetic = synthetic.tolist()
 print(synthetic)
 
+# ------------------- Changing the length of an individual time series ---------------- #
+print("\nChanging length of an individual time series:")
+print("Before:")
+# t_series = [1, 2, 3, 5, 5.5, 5.6, 8.9, 15, 0, -12, -5, 0]
+t_series = [[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12], [13, 14, 15], [16, 17, 18]]
+
+print(t_series)
+t_series = dtw_barycenter_averaging_petitjean([t_series], barycenter_size=int(len(t_series) * 2)
+                                              ).tolist()
+print("After:")
+print(t_series)
+
 # --------Negative weights example --------------- #
 # Look into neg. weights later!!
 
-print("Applying wDBA where we pass in negative weights: ")
+print("\nApplying wDBA where we pass in negative weights: ")
 t_1 = [5, 5, 7, 7, 5, 5]
 t_2 = [1, 1, 2, 2, 1, 1]
 # t_3 = [2,4,8,9,3,3]
@@ -41,3 +53,4 @@ averaging_weights1 = np.array([1.25, -0.25])
 synthetic = dtw_barycenter_averaging_petitjean(dataset, barycenter_size=6, weights=averaging_weights1)
 synthetic = synthetic.flatten().tolist()
 print(synthetic)
+

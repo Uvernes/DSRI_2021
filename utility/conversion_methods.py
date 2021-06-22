@@ -1,5 +1,6 @@
 import numpy as np
 from utility.nearest_rotation_matrix import exact_nearest_rotation_matrix
+from tslearn.barycenters import dtw_barycenter_averaging_petitjean
 import sys
 
 """
@@ -53,29 +54,91 @@ def fix_rotation_matrices(time_series):
         time_series[i] = fix_rotation_matrix(time_series[i])
 
 
-def prepare_time_series_for_model(time_series):
+def convert_all_time_series_to_same_length_using_wdba(dataset, fixed_length):
+
+    for skill_level in dataset:
+        for surgery_type in dataset[skill_level]:
+            for i in range(len(dataset[skill_level][surgery_type])):
+                converted_time_series = \
+                     dtw_barycenter_averaging_petitjean([dataset[skill_level][surgery_type][i]],
+                                                        barycenter_size=fixed_length).tolist()
+                fix_rotation_matrices(converted_time_series)
+                dataset[skill_level][surgery_type][i] = converted_time_series
+
+
+def zero_pad_single_time_series(t_series, fixed_length, position):
+    t_series = t_series.tolist()
+    for i in range(len(t_series)):
+        while len(t_series[i]) < fixed_length:
+            if position == "pre":
+                t_series[i].insert(0, 0)
+            else:
+                t_series[i].append(0)
+
+    return np.array(t_series)
+
+
+def zero_pad_time_series(dataset, fixed_length, position="pre"):
+    """
+    This function zero-pads all the time series in a given dataset to some fixed-length
+    :param dataset - dictionary storing time series
+    :param fixed_length - length to pad time series to
+    :param position: If 'pre', zeros added to start of time series. If 'post', zeros added to end of time series
+    """
+    if position != "pre" and position != "post":
+        return
+
+    for skill_level in dataset:
+        for surgery_type in dataset[skill_level]:
+            # Go through all time series for a particular skill level and surgery type
+            for i in range(len(dataset[skill_level][surgery_type])):
+                dataset[skill_level][surgery_type][i] = \
+                    zero_pad_single_time_series(dataset[skill_level][surgery_type][i], fixed_length, position)
+
+
+def change_format_of_single_time_series(time_series):
     """
     This method takes in a time series represented as a 2D list with inner lists, one inner list for each timestamp.
-    It then changes it into an a 2D np array with 16 inner lists, one corresp. to each entry in the transformation matrix.
+    It then changes it into an a 2D np array with 12 inner lists, one corresp. to each entry in the transformation matrix.
     (see more details in documentation below).
     """
-    num_variables = 12   # Number of variables measured by transformations (not including bottom row of matrices)
+    # Number of variables measured by transformations (does not include bottom row of matrices)
+    num_variables = len(time_series[0])
     prepared = []
-    for _ in range(16):
+    for _ in range(num_variables):
         prepared.append([])
     for transformation in time_series:
-        for i in range(16):
-            if i < num_variables:
-                prepared[i].append(transformation[i])
-            elif i < num_variables + 3:
-                prepared[i].append(0)
-            else:
-                prepared[i].append(1)
+        for i in range(num_variables):
+            prepared[i].append(transformation[i])
 
     return np.array(prepared)
 
 
-def prepare_sets_for_model(train_set, val_set, test_set):
+def change_format_of_time_series(dataset):
+    """
+    This function goes through all of the time series in the dataset provided and changes them into the form
+    required by model.fit()
+    Specifically:
+    -Previously time series were 2D lists with inner lists of length 12, and the number of inner lists was equal to
+     the number of timestamps
+    -Now, time series are 2D np arrays, with inner np arrays having a length equal to the number of timestamps.
+    -There are 12 np arrays, each corresponding to an entry in the translation matrix observed across time
+     (we ignore the bottom row of matrices)
+    :param dataset - dictionary storing time series data, split into experts and novices, and then into IP and OOP
+    :return
+    """
+    for skill_level in dataset:
+        for surgery_type in dataset[skill_level]:
+            # Go through all time series for a particular skill level and surgery type
+            for i in range(len(dataset[skill_level][surgery_type])):
+                dataset[skill_level][surgery_type][i] = \
+                    change_format_of_single_time_series(dataset[skill_level][surgery_type][i])
+
+    return dataset
+
+
+# OLD - NO LONGER USED
+def prepare_sets_for_model(sets):
 
     """
     This function goes through all of the time series in all of the sets provided, and changes them into the form
@@ -85,14 +148,24 @@ def prepare_sets_for_model(train_set, val_set, test_set):
     -Previously time series were 2D lists with inner lists of length 12, and the number of inner lists was equal to
      the number of timestamps
     -Now, time series are 2D np arrays, with inner np arrays having a length equal to the number of timestamps.
-    - There are 16 np arrays, each correspond to an entry in the translation matrix observed across time.
+    - There are 12 np arrays, each correspond to an entry in the translation matrix observed across time.
+      (we ignore the bottom row)
 
-    Parameters - training, validation, and test set respectively. Each are tuples with 2 elements
-                 (this separates novice and expert data)
-    Returns - The three sets, with now all the time series in the proper form. Sets are tuples, and elements are lists
-              storing multiple time series
+    Parameters - Dictionary storing all training, validation, and test set data respectively.
+    Returns - Three sets, with now all the time series in the proper form. Sets are tuples with 2 elements
+               (corresponding to the two skill levels, and elements are lists storing multiple time series)
     """
+    # Extracting 3 sets, no longer stored as dictionaries, and not split into IP and OOP surgeries. Still split
+    # into novices and experts. Each set stored as a list with 2 elements, one corresponding to each skill level
+    train_set, val_set, test_set = [[], []], [[], []], [[], []]
+    new_sets = [train_set, val_set, test_set]
+    set_names = ["train", "val", "test"]
+    for i in range(len(set_names)):
+        new_sets[i][0] = sets[set_names[i]]["Novice"]["IP"] + sets[set_names[i]]["Novice"]["OOP"]
+        new_sets[i][1] = sets[set_names[i]]["Expert"]["IP"] + sets[set_names[i]]["Expert"]["OOP"]
+
     num_skill_levels = len(train_set)
+
     train_set_prepared = [[] for _ in range(num_skill_levels)]
     val_set_prepared = [[] for _ in range(num_skill_levels)]
     test_set_prepared = [[] for _ in range(num_skill_levels)]
@@ -106,10 +179,29 @@ def prepare_sets_for_model(train_set, val_set, test_set):
         cur_set = original_sets[set_index]
         for skill_index in range(num_skill_levels):
             for t_series in cur_set[skill_index]:
-                prepared_sets[set_index][skill_index].append(prepare_time_series_for_model(t_series))
+                prepared_sets[set_index][skill_index].append(change_format_of_single_time_series(t_series))
         prepared_sets[set_index] = tuple(prepared_sets[set_index])
 
     return tuple(prepared_sets)
+
+
+def participants_storage_to_dictionary(storage):
+    """
+    This function takes in a ParticipantStorage object, and adds all of its time series into a multi-level dictionary.
+    The dictionary splits data into novices and experts, and then into IP and OOP surgeries.
+    e.g dataset["Novices"]["OOP"] returns a list of all novice OOP time series data
+    Note: Dictionary does not keep track of participant names (so conversion cannot be reversed)
+    """
+    dataset = dict(
+        Novices=dict(IP=[], OOP=[]),
+        Experts=dict(IP=[], OOP=[])
+    )
+    for participant in storage.participants.values():
+        for surgery in participant.surgeries:
+            dataset[surgery.skill_level + "s"][surgery.surgery_type].append(surgery.time_series)
+
+    return dataset
+
 
 # ------------- Testing ----------------
 
