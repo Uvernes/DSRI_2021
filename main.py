@@ -42,16 +42,6 @@ HYPER_PARAMETERS_GRID = {
     "regularizer":      [0.05]                                 # originally 0.05
 }
 
-# HYPER_PARAMETERS_GRID = {
-#     "kernel-size":      [5],                                # originally 5
-#     "filters":          [64],                              # originally 64
-#     "epochs":           [5, 10],                             # originally 300
-#     "batch-size":       [32],                              # originally 32
-#     "dropout-rate":     [0.2],                             # originally 0.5
-#     "learning-rate":    [0.0001],                   # originally 0.0001
-#     "regularizer":      [0.05]                             # originally 0.05
-# }
-
 
 def main():
 
@@ -59,8 +49,8 @@ def main():
     dataset = load_dataset(DATASET_PATH, SEQUENCE_TYPE)
     # Test results will later be a dictionary <- so it can store all AUC results, f1-score results, etc.
     # Optimal configurations is parallel to each of the lists in test_results.values()
-    test_results, optimal_configurations = nested_cv(dataset, "f1-score", K_OUTER, K_INNER,
-                                                     HYPER_PARAMETERS_GRID, TIME_SERIES_LENGTH_FOR_MODEL)
+    test_results, optimal_configurations = nested_cv(dataset, K_OUTER, K_INNER, HYPER_PARAMETERS_GRID, 
+                                                     TIME_SERIES_LENGTH_FOR_MODEL)
 
     print("\nTest results (f1-scores): ")
     print(test_results)
