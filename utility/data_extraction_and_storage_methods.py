@@ -180,7 +180,6 @@ def load_dataset(directory, sequence_type):
     return dataset
 
 
-
 def write_time_series_to_mha_file(time_series, timestamps, sequence_type, path):
 
     """"

@@ -1,3 +1,4 @@
+import sys
 import math
 import random
 from enum import Enum
@@ -134,6 +135,34 @@ class ParticipantsStorage:
 
         return self.surgeries_stats["experts_IP"] / self.surgeries_stats["experts_OOP"] if \
             self.surgeries_stats["experts_OOP"] else 0
+
+
+class Transcript(object):
+    """
+    Transcript - direct print output to a file, in addition to terminal (from Stack Overflow, but modified).
+
+    Usage:
+        import transcript
+        transcript.start('logfile.log')
+        print("inside file")
+        transcript.stop()
+        print("outside file")
+    """
+
+    def __init__(self, filename):
+        self.terminal = sys.stdout
+        self.logfile = open(filename, "a")
+
+    def write(self, message):
+
+        self.terminal.write(message)
+        self.logfile.write(message)
+
+    def flush(self):
+        # this flush method is needed for python 3 compatibility.
+        # this handles the flush command by doing nothing.
+        # you might want to specify some extra behavior here.
+        pass
 
 
 # class ParticipantsData:

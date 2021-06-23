@@ -58,8 +58,8 @@ def build_model(input_shape, num_classes, filters, kernel_size, dropout_rate, re
     conv3 = keras.layers.Dropout(dropout_rate)(conv3)
 
     gap = keras.layers.GlobalAveragePooling1D()(conv3)
-    # output_layer = keras.layers.Dense(num_classes, activation='softmax')(gap)
-    output_layer = keras.layers.Dense(num_classes, activation='sigmoid')(gap)
+    output_layer = keras.layers.Dense(num_classes, activation='softmax')(gap)
+    # output_layer = keras.layers.Dense(1, activation='sigmoid')(gap)
 
     return keras.models.Model(inputs=input_layer, outputs=output_layer)
 

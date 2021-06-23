@@ -4,12 +4,15 @@ import itertools
 import model_related.classes
 import model_related.utils as ut
 import numpy as np
+import tensorflow as tf
 from utility.conversion_methods import *
 from model_related.model_methods import build_compile_and_fit_model, auc_internal
-from sklearn.metrics import recall_score, confusion_matrix, f1_score
+from sklearn.metrics import f1_score
 from statistics import mean
 
-# Note: If we get poor splitting, logic in here will need to change
+VALIDATION_PERFORMANCE_MEASURES = ["Sparse categorical loss", "Sparse categorical accuracy", "AUC", "f1-score",
+                                   "Precision", "Recall"]
+
 
 def compare_ratios(ratios_1, ratios_2, novices_to_experts, novices_IP_to_OOP, experts_IP_to_OOP):
     """
@@ -28,13 +31,12 @@ def compare_ratios(ratios_1, ratios_2, novices_to_experts, novices_IP_to_OOP, ex
     # one of them
     ratios_IP_to_OOP_dif = []
     for i in range(2):
-
         ratios_IP_to_OOP_dif.append(
-            (((ratios[i][0][1] - novices_IP_to_OOP) / novices_IP_to_OOP)**2 +
-             ((ratios[i][0][2] - experts_IP_to_OOP) / experts_IP_to_OOP)**2)**2
+            (((ratios[i][0][1] - novices_IP_to_OOP) / novices_IP_to_OOP) ** 2 +
+             ((ratios[i][0][2] - experts_IP_to_OOP) / experts_IP_to_OOP) ** 2) ** 2
             +
-            (((ratios[i][1][1] - novices_IP_to_OOP) / novices_IP_to_OOP)**2 +
-             ((ratios[i][1][2] - experts_IP_to_OOP) / experts_IP_to_OOP)**2)**2)
+            (((ratios[i][1][1] - novices_IP_to_OOP) / novices_IP_to_OOP) ** 2 +
+             ((ratios[i][1][2] - experts_IP_to_OOP) / experts_IP_to_OOP) ** 2) ** 2)
 
     if ratios_IP_to_OOP_dif[0] < ratios_IP_to_OOP_dif[1]:
         return True
@@ -43,8 +45,8 @@ def compare_ratios(ratios_1, ratios_2, novices_to_experts, novices_IP_to_OOP, ex
 
     # Case where scores are equal
     # Check which list of ratios improves novices:experts most
-    r1_novices_to_experts_dif = (ratios_1[0][0] - novices_to_experts)**2 + (ratios_1[1][0] - novices_to_experts)**2
-    r2_novices_to_experts_dif = (ratios_2[0][0] - novices_to_experts)**2 + (ratios_2[1][0] - novices_to_experts)**2
+    r1_novices_to_experts_dif = (ratios_1[0][0] - novices_to_experts) ** 2 + (ratios_1[1][0] - novices_to_experts) ** 2
+    r2_novices_to_experts_dif = (ratios_2[0][0] - novices_to_experts) ** 2 + (ratios_2[1][0] - novices_to_experts) ** 2
     if r1_novices_to_experts_dif < r2_novices_to_experts_dif:
         return True
     else:
@@ -81,7 +83,7 @@ def new_ratios_if_participants_swapped(fold_1, fold_2, p1_name, p2_name):
                 key = skill_levels[j] + "_" + surgery_types[k]
                 stats[i].append(folds[i].surgeries_stats[key]
                                 - folds[i].participants[names[i]].surgeries_stats[key]
-                                + folds[(i+1) % 2].participants[names[(i+1) % 2]].surgeries_stats[key])
+                                + folds[(i + 1) % 2].participants[names[(i + 1) % 2]].surgeries_stats[key])
 
     # print("Number of novices_IP in fold 1, fold 2, after switch:")
     # print(stats[0][0], "|", stats[1][0])
@@ -176,7 +178,7 @@ def swap_participants_between_all_folds(folds, novices_to_experts, novices_IP_to
         # [[fold i ratio 1, ... , fold i ratio 3] [fold j ratio 1, ... , fold j ratio 3 ]]
         best_ratios = []
 
-        for j in range(i+1, len(folds)):
+        for j in range(i + 1, len(folds)):
             # cur_pair is a possible swap between fold i and some other fold that improves the ratio(s).
             # If it improves it more than the current best_pair, it replaces it
             cur_pair, cur_ratios = find_best_participants_to_swap_between_folds(folds[i], folds[j], novices_to_experts,
@@ -215,7 +217,6 @@ def swap_participants_between_all_folds(folds, novices_to_experts, novices_IP_to
 
 
 def split_dataset_into_k_folds(dataset, k, shuffle=True, recursive=True):
-
     """
     This function takes in a dataset and splits it into k user-out, stratified folds.
     :param dataset: Dataset to split into k folds. Represented as a ParticipantsStorage object
@@ -238,14 +239,14 @@ def split_dataset_into_k_folds(dataset, k, shuffle=True, recursive=True):
     for i in range(k):
         folds.append(model_related.classes.ParticipantsStorage())
         # Add ~n/k participants to the i'th fold. Last fold left with remainder
-        upper_index = (i + 1) * math.floor(len(participant_names)/k) if i < k-1 else len(participant_names)
-        for j in range(i * math.floor(len(participant_names)/k), upper_index):
+        upper_index = (i + 1) * math.floor(len(participant_names) / k) if i < k - 1 else len(participant_names)
+        for j in range(i * math.floor(len(participant_names) / k), upper_index):
             folds[i].add_participant(dataset.participants[participant_names[j]])
 
     # Spread out remainder from last fold, starting at first fold
     remainder = len(participant_names) % k
     for i in range(remainder):
-        folds[i].add_participant(folds[k-1].pop_participant())
+        folds[i].add_participant(folds[k - 1].pop_participant())
 
     # print("Number of participants in each fold:")
     # for i in range(k):
@@ -311,26 +312,81 @@ def join_folds(folds):
     return result
 
 
-# i.e non-nested cv
-def regular_cv(train_set, k, hyper_params, fixed_length_for_time_series):
+# Validation performances measures measured in regular_cv
+def performance_measures_dict():
+    return {
+        "Sparse categorical loss": [],
+        "Sparse categorical accuracy": [],
+        "AUC": [],
+        "f1-score": [],
+        "Precision": [],
+        "Recall": []
+    }
 
-    val_results = []
+
+def compute_performance_measures(model, set):
+    performance_results = dict()
+    x = set[0]
+    y_true = set[1]
+    y_pred = model.predict(x)
+    y_pred_rounded = np.argmax(y_pred, axis=1)
+    y_pred_prob_of_expert = []
+    for y in y_pred:
+        y_pred_prob_of_expert.append(y[1])
+
+    # print("y_true:\n", y_true)
+    # print("y_pred_rounded:\n", y_pred_rounded)
+    # print("y_pred_prob_of_expert:\n", y_pred_prob_of_expert)
+
+    # Sparse categorical loss and accuracy
+    performance_results["Sparse categorical loss"], performance_results["Sparse categorical accuracy"] = \
+        model.evaluate(x=x, y=y_true, verbose=0)
+
+    # AUC
+    m = tf.keras.metrics.AUC()
+    m.update_state(y_true, y_pred_prob_of_expert)
+    # m.update_state([0, 0, 1, 1], [0, 0.5, 0.55, 0.6])
+    # print(m.result().numpy())
+    # print(float(m.result()))
+    # exit()
+    performance_results["AUC"] = float(m.result())
+
+    # Precision
+    m = tf.keras.metrics.Precision()
+    m.update_state(y_true, y_pred_rounded)
+    performance_results["Precision"] = float(m.result().numpy())
+
+    # Recall
+    m = tf.keras.metrics.Recall()
+    m.update_state(y_true, y_pred_rounded)
+    performance_results["Recall"] = float(m.result().numpy())
+
+    # f1-score
+    performance_results["f1-score"] = f1_score(y_true, y_pred_rounded)
+
+    return performance_results
+
+
+# i.e non-nested cv. Computes all performance measures of interest, for each fold
+def regular_cv(train_set, k, hyper_params, fixed_length_for_time_series):
+    all_val_results = performance_measures_dict()
+
     inner_folds = split_dataset_into_k_folds(train_set, k)
     for i in range(k):
 
-        inner_train_set = join_folds(inner_folds[0:i] + inner_folds[i+1:])
+        inner_train_set = join_folds(inner_folds[0:i] + inner_folds[i + 1:])
         inner_val_set = inner_folds[i]
 
-        print("Inner training set surgeries:", inner_train_set.surgeries_stats["surgeries"])
-        print("Inner validation set surgeries:", inner_val_set.surgeries_stats["surgeries"])
+        # print("Inner training set surgeries:", inner_train_set.surgeries_stats["surgeries"])
+        # print("Inner validation set surgeries:", inner_val_set.surgeries_stats["surgeries"])
 
         # Convert sets (ParticipantsStorage objects) into dictionaries of time series
         inner_train_set = participants_storage_to_dictionary(inner_train_set)
         inner_val_set = participants_storage_to_dictionary(inner_val_set)
 
-        print("Number of novices IP, OOP, experts IP, OOP, respectively in inner training set:")
-        print(len(inner_train_set["Novices"]["OOP"]), "|", len(inner_train_set["Novices"]["IP"]), "|",
-              len(inner_train_set["Experts"]["IP"]), "|", len(inner_train_set["Experts"]["OOP"]))
+        # print("Number of novices IP, OOP, experts IP, OOP, respectively in inner training set:")
+        # print(len(inner_train_set["Novices"]["OOP"]), "|", len(inner_train_set["Novices"]["IP"]), "|",
+        #       len(inner_train_set["Experts"]["IP"]), "|", len(inner_train_set["Experts"]["OOP"]))
 
         # Apply data augmentation here to training set - LATER
         # potentially on val set too
@@ -353,41 +409,26 @@ def regular_cv(train_set, k, hyper_params, fixed_length_for_time_series):
 
         model = build_compile_and_fit_model(hyper_params, inner_train_set)
 
-        print("\n")
+        # test on val set and record results (in order val sets are tested)
+        cur_val_results = compute_performance_measures(model, inner_val_set)
+        for performance_measure in all_val_results:
+            all_val_results[performance_measure].append(cur_val_results[performance_measure])
 
-        # test on val set and record results (in descending order)
-        y_pred = model.predict(inner_val_set[0])
-
-        # Testing AUC
-        # auc = auc_internal(y_true=inner_val_set[1], y_pred=y_pred)
-        # print("AUC: ", auc)
-        # exit()
-
-        y_pred = np.argmax(y_pred, axis=1)
-        cur_val_result = f1_score(y_true=inner_val_set[1], y_pred=y_pred)
-
-        if len(val_results) == 0:
-            val_results.append(cur_val_result)
-            continue
-        for j in range(len(val_results)):
-            if cur_val_result > val_results[j]:
-                val_results.insert(j, cur_val_result)
-                break
-            if j == (len(val_results) - 1):
-                val_results.append(cur_val_result)
-
-    return val_results
+    return all_val_results
 
 
-def grid_search_cv(train_set, k, hyper_params_grid, fixed_length_for_time_series):
-
+def grid_search_cv(train_set, k, hyper_params_grid, fixed_length_for_time_series, val_performance_measure):
     # Stores all hyper-parameter combinations to try out in grid search
     hyper_param_combinations = []
     for hyper_param in hyper_params_grid.values():
         hyper_param_combinations.append(hyper_param)
     hyper_param_combinations = list(itertools.product(*hyper_param_combinations))
+    print("Combinations:")
+    print(hyper_param_combinations)
 
-    average_val_results = []
+    all_average_val_results = performance_measures_dict()
+    performance_measures = list(all_average_val_results.keys())
+
     ordered_configurations = []
     for i in range(len(hyper_param_combinations)):
 
@@ -399,55 +440,72 @@ def grid_search_cv(train_set, k, hyper_params_grid, fixed_length_for_time_series
             hyper_params_dict[key] = cur_hyper_params[index]
             index += 1
 
-        # Only interested in the average val f1-score, AUC, etc.
-        cur_average_val_result = regular_cv(train_set, k, hyper_params_dict, fixed_length_for_time_series)
-        print("\nf1 results for a fixed hyper-param configuration: ")
-        print(cur_average_val_result)
+        # The various lists of validation performance measures are averaged
+        cur_val_results = regular_cv(train_set, k, hyper_params_dict, fixed_length_for_time_series)
+        cur_average_val_results = dict()
 
-        cur_average_val_result = mean(cur_average_val_result)
+        for performance_measure in cur_val_results:
+            cur_average_val_results[performance_measure] = mean(cur_val_results[performance_measure])
 
-        if len(average_val_results) == 0:
-            average_val_results.append(cur_average_val_result)
-            ordered_configurations.append(cur_hyper_params)
-        else:
-            # Adds in validation results such that they are in descending order
-            for j in range(len(average_val_results)):
-                if cur_average_val_result > average_val_results[j]:
-                    average_val_results.insert(j, cur_average_val_result)
-                    ordered_configurations.insert(j, cur_hyper_params)
-                    break
-                if j == (len(average_val_results) - 1):
-                    average_val_results.append(cur_average_val_result)
-                    ordered_configurations.append(cur_hyper_params)
+        # print("\nCurrent validation performances:")
+        # print(cur_val_results)
 
-    return average_val_results, ordered_configurations
+        # print("\nAveraged results for a fixed hyper-param configuration: ")
+        # print(cur_average_val_results)
+        #
+        # print("\nall_average_val_results before appending:")
+        # print(all_average_val_results)
+
+        # Add current results to all results in descending order, where we descend w.r.t val_performance_measure
+        j = 0
+        # e.g if val_performance_measure is "AUC", variable below stores a list of AUC averages
+        measures_of_interest = all_average_val_results[val_performance_measure]
+        while j < len(measures_of_interest):
+            if cur_average_val_results[val_performance_measure] > measures_of_interest[j]:
+                break
+            j += 1
+        for performance_measure in all_average_val_results:
+            all_average_val_results[performance_measure].insert(j, cur_average_val_results[performance_measure])
+        ordered_configurations.insert(j, cur_hyper_params)
+
+    # print("\nAll average validation results and corresponding, ordered configurations (best hyper-params used to do",
+    #       "final training)")
+    # print(all_average_val_results)
+    # print(ordered_configurations)
+
+    return all_average_val_results, ordered_configurations
 
 
-def nested_cv(dataset, k_outer, k_inner, hyper_params_grid, fixed_length_for_time_series):
-
-    test_results = []
+def nested_cv(dataset, k_outer, k_inner, hyper_params_grid, fixed_length_for_time_series,
+              val_performance_measure="AUC"):
+    all_train_results = performance_measures_dict()
+    all_test_results = performance_measures_dict()
     optimal_configurations = []
+
+    if val_performance_measure not in VALIDATION_PERFORMANCE_MEASURES:
+        return all_train_results, all_test_results, optimal_configurations
 
     # OUTER CV - split data into k_outer folds. Each fold is a ParticipantsData object
     outer_folds = split_dataset_into_k_folds(dataset, k=k_outer)
 
     for i in range(k_outer):
 
-        train_set = join_folds(outer_folds[0:i] + outer_folds[i+1:])
+        train_set = join_folds(outer_folds[0:i] + outer_folds[i + 1:])
         test_set = outer_folds[i]
-        print("Training set surgeries:", train_set.surgeries_stats["surgeries"])
-        print("Test set surgeries:", test_set.surgeries_stats["surgeries"], "\n")
+        # print("Training set surgeries:", train_set.surgeries_stats["surgeries"])
+        # print("Test set surgeries:", test_set.surgeries_stats["surgeries"], "\n")
 
         # GRID SEARCH
-        inner_val_results, ordered_configurations =\
-            grid_search_cv(train_set, k_inner, hyper_params_grid, fixed_length_for_time_series)
+        inner_val_results, ordered_configurations = \
+            grid_search_cv(train_set, k_inner, hyper_params_grid, fixed_length_for_time_series,
+                           val_performance_measure)
 
-        print("\nFinished grid search...")
-        print("Validation results:")
-        print(inner_val_results)
-        print("Corresponding Hyper-parameter configurations:")
-        print(ordered_configurations)
-        print("\n")
+        # print("\nFinished grid search...")
+        # print("Validation results:")
+        # print(inner_val_results)
+        # print("Corresponding Hyper-parameter configurations:")
+        # print(ordered_configurations)
+        # print("\n")
 
         # Prepare train and test sets
         train_set = participants_storage_to_dictionary(train_set)
@@ -461,9 +519,8 @@ def nested_cv(dataset, k_outer, k_inner, hyper_params_grid, fixed_length_for_tim
 
         train_set = ut.split_set_into_x_and_y(train_set)
         test_set = ut.split_set_into_x_and_y(test_set)
-        x_test, y_test = test_set
 
-        # Fit model on entire training set and test on test set
+        # Fit model on entire training set
         best_hyper_params = ordered_configurations[0]
         hyper_params_dict = dict()
         index = 0
@@ -471,59 +528,17 @@ def nested_cv(dataset, k_outer, k_inner, hyper_params_grid, fixed_length_for_tim
             hyper_params_dict[key] = best_hyper_params[index]
             index += 1
         model = build_compile_and_fit_model(hyper_params_dict, train_set)
-        print("\n")
 
-        print("\nMaking predictions on test set using model with optimal hyper-parameters...")
-        y_pred = model.predict(x_test)
-        # print(y_pred)
-        y_pred = np.argmax(y_pred, axis=1)  # changes predictions to be single outputs, 0 or 1
+        # Compute training set and test set results
+        # print("\n\nMaking predictions on test set using model with optimal hyper-parameters...")
+        cur_train_results = compute_performance_measures(model, train_set)
+        cur_test_results = compute_performance_measures(model, test_set)
 
-        # Issue: all predictions are experts. Likely due to data becoming too skewed after window slicing
+        for performance_measure in all_test_results:
+            all_train_results[performance_measure].append(cur_train_results[performance_measure])
+            all_test_results[performance_measure].append(cur_test_results[performance_measure])
+        optimal_configurations.append(best_hyper_params)
 
-        # ---------- DEBUGGING ----------- #
-        # print("\nAfter making predictions...")
-        # print("\nTest set size:", len(y_test))
-        # print("\nPredictions size:", len(y_pred))
-        # num_pred_novices = 0
-        # num_pred_experts = 0
-        # for pred in y_pred:
-        #     if pred == 1:
-        #         num_pred_experts += 1
-        #     if pred == 0:
-        #         num_pred_novices += 1
-        # print("\nNumber of predicted novices:", num_pred_novices)
-        # print("Number of predicted experts:", num_pred_experts)
-        #
-        # num_test_novices = 0
-        # num_test_experts = 0
-        # for pred in y_test:
-        #     if pred == 1:
-        #         num_test_experts += 1
-        #     if pred == 0:
-        #         num_test_novices += 1
-        # print("\nNumber of novices in test set:", num_test_novices)
-        # print("Number of experts in test set:", num_test_experts)
-        # ---------------------------------#
+        print("Done test " + str(i+1) + "\\" + str(k_outer) + "...\n")
 
-        cur_test_f_score = f1_score(y_true=y_test, y_pred=y_pred)
-
-        # print("\nF1 score on test set:")
-        # print("F1 score:", test_f_score)
-
-        # Adds in test results such that they are in descending order
-        if len(test_results) == 0:
-            test_results.append(cur_test_f_score)
-            optimal_configurations.append(best_hyper_params)
-            continue
-        for j in range(len(test_results)):
-            if cur_test_f_score > test_results[j]:
-                test_results.insert(j, cur_test_f_score)
-                optimal_configurations.insert(j, best_hyper_params)
-                break
-            if j == (len(test_results) - 1):
-                test_results.append(cur_test_f_score)
-                optimal_configurations.append(best_hyper_params)
-
-    return test_results, optimal_configurations
-
-
+    return outer_folds, all_train_results, all_test_results, optimal_configurations
