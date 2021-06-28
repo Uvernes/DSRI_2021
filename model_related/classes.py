@@ -1,7 +1,11 @@
 import sys
 import math
 import random
+from data_augmentation import jittering, smote_based_wDBA
 from enum import Enum
+from utility.conversion_methods import join_dataset_dictionaries
+
+DATA_AUGMENTATION_TECHNIQUES = ["smote_based_wdba", "jittering"]
 
 
 class ProficiencyLabel(Enum):
@@ -137,6 +141,134 @@ class ParticipantsStorage:
             self.surgeries_stats["experts_OOP"] else 0
 
 
+class Jittering:
+
+    def __init__(self, rotation_magnitude=1, translation_magnitude=1):
+
+        self.rotation_magnitude = rotation_magnitude
+        self.translation_magnitude = translation_magnitude
+
+    def execute(self, dataset, synthetic_amount):
+        return jittering.jittering_specified_amount(
+            dataset, synthetic_amount, self.rotation_magnitude, self.translation_magnitude)
+
+
+class SmoteBasedWDBA:
+
+    def __init__(self, k=None):
+        self.k = k
+
+    def execute(self, dataset, synthetic_amount):
+        return smote_based_wDBA.smote_based_weighted_dba_specified_amount(
+            dataset, synthetic_amount, self.k)
+
+
+class DataAugmentationInstruction:
+
+    # Technique refers to the data augmentation technique to use
+    def __init__(self, technique, augment_synthetic=False):
+        self.technique = technique
+        self.augment_synthetic = augment_synthetic
+
+
+class BalanceDataset(DataAugmentationInstruction):
+
+    def __init__(self, technique, augment_synthetic=False):
+
+        super().__init__(technique, augment_synthetic)
+
+    # Here is the code for balancing a dataset. First balance novices IP, OOP and experts IP, OOP.
+    # Afterwards, balance novices and experts . We always up-sample, via the specified technique.
+    # Returns synthetic samples
+    def execute(self, original_dataset, synthetic_dataset):
+
+        enhanced_set = join_dataset_dictionaries(original_dataset, synthetic_dataset)
+        # print("Num of novices IP:", len(enhanced_set["Novices"]["IP"]))
+        # print("Num of novices OOP:", len(enhanced_set["Novices"]["OOP"]))
+        # print("Num of experts OP:", len(enhanced_set["Experts"]["IP"]))
+        # print("Num of experts OOP:", len(enhanced_set["Experts"]["OOP"]))
+
+        # If enhanced_set assigned, then new samples may be creating using the synthetic ones passed in.
+        set_used_for_augmentation = enhanced_set if self.augment_synthetic else original_dataset
+
+        # Balance novices IP and OOP, and then experts IP, OOP (in enhanced set)
+        for skill_level in ["Novices", "Experts"]:
+            desired_size = max(len(enhanced_set[skill_level]["IP"]), len(enhanced_set[skill_level]["OOP"]))
+            for surgery_type in ["IP", "OOP"]:
+                synthetic_amount = desired_size - len(enhanced_set[skill_level][surgery_type])
+                synthetic_dataset[skill_level][surgery_type] += \
+                    self.technique.execute(set_used_for_augmentation[skill_level][surgery_type], synthetic_amount)
+
+        # Balance novices and experts. At this point, 1:1 IP to OOP ratio for both skill levels
+        num_novices_IP = len(original_dataset["Novices"]["IP"]) + len(synthetic_dataset["Novices"]["IP"])
+        num_experts_IP = len(original_dataset["Experts"]["IP"]) + len(synthetic_dataset["Experts"]["IP"])
+        desired_size = max(num_novices_IP, num_experts_IP)
+
+        # print("num_novices_IP:", num_novices_IP)
+        # print("num_experts_IP", num_experts_IP)
+
+        for skill_level in ["Novices", "Experts"]:
+            for surgery_type in ["IP", "OOP"]:
+                # Want to get to the desired size. Need to account both original and synthetic samples
+                synthetic_amount = desired_size - (len(original_dataset[skill_level][surgery_type]) +
+                                                   len(synthetic_dataset[skill_level][surgery_type]))
+                synthetic_dataset[skill_level][surgery_type] += \
+                    self.technique.execute(set_used_for_augmentation[skill_level][surgery_type], synthetic_amount)
+
+        return synthetic_dataset
+
+
+# Novices IP, Novices OOP, Experts IP, Experts OOP, which make up the dataset, are all increased by the given factor
+# independently.
+class IncreaseDatasetProportionally(DataAugmentationInstruction):
+
+    def __init__(self, technique, increase_factor, augment_synthetic=False):
+
+        super().__init__(technique, augment_synthetic)
+        self.increase_factor = increase_factor
+
+    def execute(self, original_dataset, synthetic_dataset):
+
+        enhanced_set = join_dataset_dictionaries(original_dataset, synthetic_dataset)
+        set_used_for_augmentation = enhanced_set if self.augment_synthetic else original_dataset
+
+        if self.increase_factor <= 1:
+            return synthetic_dataset
+
+        # Increase each division separately
+        for skill_level in ["Novices", "Experts"]:
+            for surgery_type in ["IP", "OOP"]:
+                desired_size = round(self.increase_factor * len(enhanced_set[skill_level][surgery_type]))
+                synthetic_amount = desired_size - len(enhanced_set[skill_level][surgery_type])
+                synthetic_dataset[skill_level][surgery_type] += \
+                    self.technique.execute(set_used_for_augmentation[skill_level][surgery_type], synthetic_amount)
+
+        return synthetic_dataset
+
+
+class DataAugmentationController:
+
+    # Instructions stores list of data augmentation steps to perform
+    def __init__(self, instructions=None):
+        if instructions is None:
+            self.instructions = []
+        else:
+            self.instructions = instructions
+
+    def add_instruction(self, instruction):
+        self.instructions.append(instruction)
+
+    def execute(self, original_dataset):
+        synthetic_dataset = dict(
+            Novices=dict(IP=[], OOP=[]),
+            Experts=dict(IP=[], OOP=[])
+        )
+        for instruction in self.instructions:
+            synthetic_dataset = instruction.execute(original_dataset, synthetic_dataset)
+
+        return synthetic_dataset
+
+
 class Transcript(object):
     """
     Transcript - direct print output to a file, in addition to terminal (from Stack Overflow, but modified).
@@ -165,152 +297,6 @@ class Transcript(object):
         pass
 
 
-# class ParticipantsData:
-#     def __init__(self):
-#         self.store = dict()
-#
-#     def add_participant(self, part: ParticipantScan) -> bool:
-#         if part.get_name() not in self.store:
-#             self.store[part.get_name()] = part
-#             return True
-#
-#         return False
-#
-#     def __getitem__(self, item: str) -> ParticipantScan:
-#         return self.store[item]
-#
-#     def __contains__(self, part_name: str) -> bool:
-#         return part_name in self.store
-#
-#     def __iter__(self) -> ParticipantScan:
-#         for p in self.store:
-#             yield self.store[p]
 
 
-class Scan(Enum):
-    """
-        Scanned region
-    """
-    LUQ = 'Scan01'
-    RUQ = 'Scan02'
-    PERICARD = 'Scan03'
-    PELVIC = 'Scan04'
-    ALL = 'ALL'
 
-
-TRANSFORM_KEY: str = 'transforms'
-TIME_KEY: str = 'time'
-PATH_LENGTH_KEY: str = 'path_len'
-ANGULAR_SPEED: str = 'ang_speed'
-LINEAR_SPEED: str = 'lin_speed'
-
-
-class TransformationRecord:
-    def __init__(self, trans_mat, time_stamp, linear_speed=0, angular_speed=0, path_length=0):
-        self.trans_mat = trans_mat
-        self.time_stamp = time_stamp
-        self.linear_speed = linear_speed
-        self.angular_speed = angular_speed
-        self.path_length = path_length
-
-
-class RegionScan:
-    def __init__(self, reg: Scan):
-        self._region = reg
-        self.path_len = 0.0
-        self.linear_speed = 0.0
-        self.angular_speed = 0.0
-        self.time = 0.0
-        self.transformations = []
-
-    def get_regon(self) -> Scan:
-        return self._region
-
-
-class ParticipantScan:
-    def __init__(self, part_name):
-        self.store = dict()
-        self.name = part_name
-        self.time = 0.0
-        self.path_length = 0.0
-        self.angular_speed = 0.0
-        self.linear_speed = 0.0
-
-        self.store[Scan.ALL] = RegionScan(Scan.ALL)
-        self.store[Scan.LUQ] = RegionScan(Scan.LUQ)
-        self.store[Scan.RUQ] = RegionScan(Scan.RUQ)
-        self.store[Scan.PELVIC] = RegionScan(Scan.PELVIC)
-        self.store[Scan.PERICARD] = RegionScan(Scan.PERICARD)
-
-    def get_transforms(self, reg: Scan) -> list:
-        return self.store[reg].transformations
-
-    def get_time(self) -> float:
-        return self.time
-
-    def get_reg_time(self, reg: Scan) -> float:
-        return self.store[reg].time
-
-    def get_region(self, reg: Scan) -> RegionScan:
-        return self.store[reg]
-
-    def add_transform(self, reg, transform_rec: TransformationRecord):
-        self.store[reg].transformations.append(transform_rec)
-
-    def get_name(self):
-        return self.name
-
-    def set_reg_time(self, reg: Scan, t: float) -> bool:
-        if reg not in self.store:
-            return False
-
-        self.store[reg][TIME_KEY] = t
-        return True
-
-    def set_reg_lin_speed(self, reg: Scan, lin_s: float) -> bool:
-        if reg not in self.store:
-            return False
-
-        self.store[reg].linear_speed = lin_s
-        return True
-
-    def add_reg_time(self, reg: Scan, t: float):
-        if reg not in self.store:
-            return False
-
-        self.store[reg].time = self.store[reg].time + t
-        return True
-
-    def set_time(self, t: float) -> bool:
-        self.time = t
-
-    def add_time(self, t: float):
-        self.time = self.time + t
-
-    def set_reg_angular_speed(self, reg: Scan, ang_s: float):
-        self.store[reg].angular_speed = ang_s
-
-    def set_angular_speed(self, ang_s: float):
-        self.angular_speed = ang_s
-
-# --------------- OLD -----------------
-# class ParticipantsData:
-#     def __init__(self):
-#         self.store = dict()
-#
-#     def add_participant(self, part: ParticipantScan) -> bool:
-#         if part.get_name() not in self.store:
-#             self.store[part.get_name()] = part
-#             return True
-#
-#         return False
-#
-#     def __getitem__(self, item: str) -> ParticipantScan:
-#         return self.store[item]
-#
-#     def __contains__(self, part_name: str) -> bool:
-#         return part_name in self.store
-#
-#     def __iter__(self) -> ParticipantScan:
-#         for p in self.store:
-#             yield self.store[p]

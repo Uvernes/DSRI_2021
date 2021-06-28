@@ -1,3 +1,4 @@
+import random
 import sys
 import numpy as np
 from scipy.spatial.transform import Rotation
@@ -61,8 +62,24 @@ def apply_jittering_to_dataset(dataset, num_jitters_per_sample, rotation_magnitu
     synthetic_samples = []
     for t_series in dataset:
         for i in range(num_jitters_per_sample):
-            synthetic_samples.append(apply_jittering_to_single_time_series(t_series))
+            synthetic_samples.append(
+                apply_jittering_to_single_time_series(t_series, rotation_magnitude, translation_magnitude))
     return synthetic_samples
+
+
+# synthetic_amount refers to the number of synthetic samples to create
+def jittering_specified_amount(dataset, synthetic_amount, rotation_magnitude=1, translation_magnitude=1, shuffle=True):
+    synthetic_samples = []
+    if synthetic_amount <= 0:
+        return synthetic_samples
+    if shuffle:
+        random.shuffle(dataset)
+    while True:
+        for t_series in dataset:
+            synthetic_samples.append(
+                apply_jittering_to_single_time_series(t_series, rotation_magnitude, translation_magnitude))
+            if len(synthetic_samples) == synthetic_amount:
+                return synthetic_samples
 
 
 # ----------- Testing ------------ #

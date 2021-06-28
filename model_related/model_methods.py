@@ -1,4 +1,3 @@
-from model_related.mhadatareader import MhaDataReader
 from model_related.classes import ProficiencyLabel
 import model_related.utils as ut
 from sklearn.metrics import confusion_matrix, classification_report, f1_score
@@ -36,7 +35,7 @@ def save_model(model, fold):
     model.save(f'./model_{fold}.tf')
 
 
-def build_model(input_shape, num_classes, filters, kernel_size, dropout_rate, regularizer):
+def build_model(input_shape, filters, kernel_size, dropout_rate, regularizer):
     input_layer = keras.layers.Input(shape=input_shape)
 
     conv1 = keras.layers.Conv1D(filters=filters, kernel_size=kernel_size, padding="same",
@@ -58,8 +57,8 @@ def build_model(input_shape, num_classes, filters, kernel_size, dropout_rate, re
     conv3 = keras.layers.Dropout(dropout_rate)(conv3)
 
     gap = keras.layers.GlobalAveragePooling1D()(conv3)
-    output_layer = keras.layers.Dense(num_classes, activation='softmax')(gap)
-    # output_layer = keras.layers.Dense(1, activation='sigmoid')(gap)
+    # output_layer = keras.layers.Dense(num_classes, activation='softmax')(gap)
+    output_layer = keras.layers.Dense(1, activation='sigmoid')(gap)
 
     return keras.models.Model(inputs=input_layer, outputs=output_layer)
 
@@ -90,9 +89,10 @@ def build_compile_and_fit_model(hyperparameters: dict, train_set: tuple):
     optimizer = keras.optimizers.Adam(
         learning_rate=hyperparameters["learning-rate"],
     )
+    # print("x_train.shape[1:] -", x_train.shape[1:])
     model = build_model(
         x_train.shape[1:],
-        len(ProficiencyLabel),
+        # len(ProficiencyLabel),
         kernel_size=hyperparameters["kernel-size"],
         filters=hyperparameters["filters"],
         dropout_rate=hyperparameters["dropout-rate"],
@@ -100,9 +100,10 @@ def build_compile_and_fit_model(hyperparameters: dict, train_set: tuple):
     )
     model.compile(
         optimizer=optimizer,
-        loss='sparse_categorical_crossentropy',
-        #loss='binary_crossentropy',
-        metrics=['sparse_categorical_accuracy'],
+        # loss='sparse_categorical_crossentropy',
+        loss='binary_crossentropy',
+        # metrics=['sparse_categorical_accuracy'],
+        metrics=['binary_accuracy'],
     )
     model.fit(
         x_train,
