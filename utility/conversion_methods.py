@@ -1,3 +1,5 @@
+import random
+
 import numpy as np
 from utility.nearest_rotation_matrix import exact_nearest_rotation_matrix
 from tslearn.barycenters import dtw_barycenter_averaging_petitjean
@@ -202,6 +204,29 @@ def participants_storage_to_dictionary(storage):
 
     return dataset
 
+
+# TESTED - works well
+def join_dataset_dictionaries(d1, d2, shuffle=True):
+
+    joined_dataset = dict(
+        Novices=dict(IP=[], OOP=[]),
+        Experts=dict(IP=[], OOP=[])
+    )
+    for skill_level in d1:
+        for surgery_type in d1[skill_level]:
+            for t_series in d1[skill_level][surgery_type]:
+                joined_dataset[skill_level][surgery_type].append(t_series)
+            for t_series in d2[skill_level][surgery_type]:
+                joined_dataset[skill_level][surgery_type].append(t_series)
+
+    if shuffle:
+        for skill_level in d1:
+            for surgery_type in d1[skill_level]:
+                random.shuffle(d1[skill_level][surgery_type])
+            for surgery_type in d2[skill_level]:
+                random.shuffle(d2[skill_level][surgery_type])
+
+    return joined_dataset
 
 # ------------- Testing ----------------
 
