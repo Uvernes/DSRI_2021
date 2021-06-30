@@ -46,11 +46,11 @@ def get_single_time_series_from_file(filename):
     2) List of timestamps for the given time series extracted.
        i.e [time_1, ..., time_last]
     """
-
     time_series = []
     timestamps = []
     f = open(filename)
     prev_transform_ok = True
+
     for line in f:
 
         if ("ReferenceTransform" not in line) and ("SequenceTransform" not in line) and ("Timestamp" not in line):
@@ -75,6 +75,7 @@ def get_single_time_series_from_file(filename):
             temp_list.append(float(split_line[i]))
         time_series.append(temp_list)
     f.close()
+
     return time_series, timestamps
 
 
@@ -137,7 +138,7 @@ def get_subset_of_dataset(directory, skill_level, sequence_type, surgery_type=No
     return dataset, timestamps_set
 
 
-def load_dataset(directory, sequence_type):
+def load_dataset(directory, sequence_types):
     """
     Parameters
     ----------
@@ -150,7 +151,7 @@ def load_dataset(directory, sequence_type):
     """
     dataset = model_related.classes.ParticipantsStorage()
 
-    if sequence_type not in SEQUENCE_TYPES:
+    if not set(sequence_types).issubset(set(SEQUENCE_TYPES)):
         return dataset
 
     for skill_level in SKILL_LEVELS:
@@ -172,10 +173,15 @@ def load_dataset(directory, sequence_type):
                     surgery_type = s_type
                     break
 
-            filename = get_filename(sequence_type)
-            time_series, timestamps = get_single_time_series_from_file(sub_directory + "\\" + dir + "\\" + filename)
+            surgery = model_related.classes.SurgeryData(skill_level, surgery_type)
+            timestamps = None
+            for sequence_type in sequence_types:
+                filename = get_filename(sequence_type)
+                time_series, timestamps = get_single_time_series_from_file(sub_directory + "\\" + dir + "\\" + filename)
+                surgery.add_sequence(sequence_type, time_series)
+            surgery.timestamps = timestamps
 
-            dataset.add_surgery(participant_name, time_series, skill_level, surgery_type, sequence_type, timestamps)
+            dataset.add_surgery(participant_name, surgery)
 
     return dataset
 

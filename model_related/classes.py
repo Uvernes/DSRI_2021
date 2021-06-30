@@ -16,16 +16,19 @@ class ProficiencyLabel(Enum):
     Expert = 1
 
 
-# Represents the data for a single surgery. Stores the time series captured from the surgery, as well as related info
+# Represents the data for a single surgery. Stores time series data captured from the surgery, as well as related info
+# May store multiple time series if multiple sequence types are considered (assumption is they all share the same timestamps)
 
 class SurgeryData:
 
-    def __init__(self, time_series, skill_level, surgery_type, sequence_type="", timestamps=[]):
-        self.time_series = time_series
+    def __init__(self, skill_level, surgery_type, timestamps=[]):
+        self.sequences = dict()
         self.skill_level = skill_level
         self.surgery_type = surgery_type
-        self.sequence_type = sequence_type
         self.timestamps = timestamps
+
+    def add_sequence(self, sequence_type, time_series):
+        self.sequences[sequence_type] = time_series
 
 
 # Instances stores all surgeries data recorded for some participant
@@ -75,11 +78,10 @@ class ParticipantsStorage:
 
     # Adds a surgery to the storage, within the corresponding participant's storage. If the participant does not exist,
     # then they are created
-    def add_surgery(self, participant_name, time_series, skill_level, surgery_type, sequence_type="", timestamps=[]):
+    def add_surgery(self, participant_name, surgery):
 
         if participant_name not in self.participants:
             self.participants[participant_name] = ParticipantData(participant_name)
-        surgery = SurgeryData(time_series, skill_level, surgery_type, sequence_type, timestamps)
         self.participants[participant_name].add_surgery(surgery)
         self.update_surgeries_stats(surgery)
 

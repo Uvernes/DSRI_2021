@@ -101,7 +101,7 @@ def zero_pad_time_series(dataset, fixed_length, position="pre"):
 def change_format_of_single_time_series(time_series):
     """
     This method takes in a time series represented as a 2D list with inner lists, one inner list for each timestamp.
-    It then changes it into an a 2D np array with 12 inner lists, one corresp. to each entry in the transformation matrix.
+    It then changes it into an a 2D np array with 12/24 inner lists, one corresp. to each entry in the transformation matrices.
     (see more details in documentation below).
     """
     # Number of variables measured by transformations (does not include bottom row of matrices)
@@ -193,6 +193,10 @@ def participants_storage_to_dictionary(storage):
     The dictionary splits data into novices and experts, and then into IP and OOP surgeries.
     e.g dataset["Novices"]["OOP"] returns a list of all novice OOP time series data
     Note: Dictionary does not keep track of participant names (so conversion cannot be reversed)
+    Note: A surgery may contain multiple time series, one for each sequence type considered. In this case.
+          correspond time series are concatenated at each time stamp
+          (e.g if two sequence types are considered, instead of a 2D list with 12-dim inner lists, we now have
+           a 2D list with 24-dim inner lists, to represent one surgery)
     """
     dataset = dict(
         Novices=dict(IP=[], OOP=[]),
@@ -200,7 +204,21 @@ def participants_storage_to_dictionary(storage):
     )
     for participant in storage.participants.values():
         for surgery in participant.surgeries:
-            dataset[surgery.skill_level + "s"][surgery.surgery_type].append(surgery.time_series)
+            time_series = []
+            sequence_types = list(surgery.sequences)
+            # print("Name:", participant.name)
+            # print("Num surgeries", len(participant.surgeries))
+            # Go through values for all timestamps
+            for index in range(len(surgery.sequences[sequence_types[0]])):
+                time_series.append([])
+                for sequence_type in sequence_types:
+                    time_series[index] += surgery.sequences[sequence_type][index]
+
+            dataset[surgery.skill_level + "s"][surgery.surgery_type].append(time_series)
+
+    # print("Some time series values at the first timestamp:")
+    # print(dataset["Novices"]["IP"][0][0])
+    # exit()
 
     return dataset
 

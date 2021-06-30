@@ -379,7 +379,8 @@ def regular_cv(train_set, k, hyper_params, epochs_list, fixed_length_for_time_se
         # print("Inner training set surgeries:", inner_train_set.surgeries_stats["surgeries"])
         # print("Inner validation set surgeries:", inner_val_set.surgeries_stats["surgeries"])
 
-        # Convert sets (ParticipantsStorage objects) into dictionaries of time series
+        # Convert sets (ParticipantsStorage objects) into dictionaries of time series.
+        # Time series of different sequence types for the same surgery are concatenated at each timestamp
         inner_train_set = participants_storage_to_dictionary(inner_train_set)
         inner_val_set = participants_storage_to_dictionary(inner_val_set)
 
@@ -615,8 +616,8 @@ def nested_cv(dataset, k_outer, k_inner, hyper_params_grid, fixed_length_for_tim
 
         best_hyper_params, best_index = get_best_hyper_params(inner_val_results, ordered_configurations)
 
-        # print("\nBest hyper-params found:")
-        # print(best_hyper_params, "\n")
+        print("\nBest hyper-params found:")
+        print(best_hyper_params, "\n")
         # exit()
 
         # Prepare train and test sets
@@ -645,6 +646,7 @@ def nested_cv(dataset, k_outer, k_inner, hyper_params_grid, fixed_length_for_tim
         for key in hyper_params_grid:
             hyper_params_dict[key] = best_hyper_params[index]
             index += 1
+        print("Hyper params used to train outer model:", hyper_params_dict)
         model = build_compile_and_fit_model(hyper_params_dict, train_set)
 
         # Compute training set and test set results

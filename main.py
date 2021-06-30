@@ -7,14 +7,14 @@ from statistics import mean, stdev
 from tabulate import tabulate
 
 DATASET_PATH = r"C:\Users\uvern\Dropbox\My PC (LAPTOP-554U8A6N)\Documents\DSRI\Data\usneedle_data\SplitManually_Score20_OnlyBF"
-SEQUENCE_TYPE = "NeedleTipToReference"
+SEQUENCE_TYPES = ["NeedleTipToReference", "ProbeToReference"]
 TIME_SERIES_LENGTH_FOR_MODEL = 2200  # Average time series length is ~258.61 , longest is 2191
 SLICE_WINDOW = 70  # originally 70
 RESULTS_FILE = "results.txt"
 
 # Used k_outer = 5 , k_inner = 3
 K_OUTER = 2
-K_INNER = 2  # or 4 (so val and test set ~same size)
+K_INNER = 5  # or 4 (so val and test set ~same size)
 
 
 # 2 * 2 * 3 * 3 * 3 = 108 combinations
@@ -52,7 +52,7 @@ def main():
     #     ]
     # )
 
-    dataset = load_dataset(DATASET_PATH, SEQUENCE_TYPE)
+    dataset = load_dataset(DATASET_PATH, SEQUENCE_TYPES)
     outer_folds, all_best_val_results, all_train_results, all_test_results, optimal_configurations = \
         nested_cv(dataset, K_OUTER, K_INNER, HYPER_PARAMETERS_GRID, TIME_SERIES_LENGTH_FOR_MODEL)
 
@@ -90,7 +90,7 @@ def main():
         lists_to_print.append([performance_measure, stdev(all_best_val_results[performance_measure]),
                                stdev(all_train_results[performance_measure]), stdev(all_test_results[performance_measure])])
     print(tabulate(tabular_data=lists_to_print,
-                   headers=["Performance measure", "Best validation results - mean", "Training - mean", "Tests - mean"]))
+                   headers=["Performance measure", "Best validation results - stdev", "Training - stdev", "Tests - stdev"]))
 
     print("\n\nAverage validation results for all best hyper-params found")
     print("----------------------------------------------------------\n")
