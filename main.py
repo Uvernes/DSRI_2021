@@ -17,7 +17,7 @@ SLICE_WINDOW = 70  # originally 70
 RESULTS_FILE = "example.txt"
 
 # Used k_outer = 5 , k_inner = 3 or 5
-K_OUTER = 5
+K_OUTER = 2
 K_INNER = 2  # or 4 (so val and test set ~same size)
 
 
@@ -34,7 +34,7 @@ K_INNER = 2  # or 4 (so val and test set ~same size)
 # }
 
 HYPER_PARAMETERS_GRID = {
-    "epochs":           [300],                          # list(range(100, 501, 50))
+    "epochs":           [5],                          # list(range(100, 501, 50))
     "kernel-size":      [15],                                # [3, 5, 10]
     "filters":          [32],                               # [8, 16] or [64]
     "batch-size":       [32],                               # originally 32
@@ -59,8 +59,8 @@ def main():
     # )
 
     dataset = load_dataset(DATASET_PATH, SEQUENCE_TYPES)
-    outer_folds, all_best_inner_train_results, all_best_val_results, all_train_results, all_test_results = \
-        nested_cv(dataset, K_OUTER, K_INNER, HYPER_PARAMETERS_GRID, TIME_SERIES_LENGTH_FOR_MODEL)
+    outer_folds, all_best_inner_train_results, all_best_val_results, all_train_results, all_test_results, optimal_configurations \
+        = nested_cv(dataset, K_OUTER, K_INNER, HYPER_PARAMETERS_GRID, TIME_SERIES_LENGTH_FOR_MODEL)
 
     toc = time.perf_counter()
 
