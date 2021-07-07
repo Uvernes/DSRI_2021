@@ -30,16 +30,15 @@ def compute_performance_measures(model, set, threshold=0.5, find_optimal_thresho
     # print("\ny_pred:", y_pred)
     # print("\ny_pred_rounded", y_pred_rounded)
 
-    # AUC - Sklearn
+    # AUC
     fpr, tpr, thresholds = roc_curve(y_true, y_pred, pos_label=1)
     performance_results["AUC"] = auc(fpr, tpr)
 
-    # get the best threshold - Youden’s J statistic method
+    # Find the best threshold - Youden’s J statistic method
     if find_optimal_threshold:
         J = tpr - fpr
         ix = np.argmax(J)
         threshold = thresholds[ix]
-        # print('Best Threshold=%f' % threshold)
 
     y_pred_rounded = np.where(y_pred > threshold, 1, 0)
 
@@ -50,149 +49,16 @@ def compute_performance_measures(model, set, threshold=0.5, find_optimal_thresho
     # Binary accuracy
     performance_results["Binary accuracy"] = accuracy_score(y_true, y_pred_rounded)
 
-    # print("Prev accuracy:", prev_accuracy)
-    # print("New accuracy:", performance_results["Binary accuracy"])
-
-    # Precision, Recall - Sklearn
+    # Precision, recall
     performance_results["Precision"] = precision_score(y_true, y_pred_rounded, zero_division=0)
     performance_results["Recall"] = recall_score(y_true, y_pred_rounded, zero_division=0)
 
     # f1-score
     performance_results["f1-score"] = f1_score(y_true, y_pred_rounded)
 
-    # prev_y_pred_rounded = np.where(y_pred > 0.5, 1, 0)
-    # print("Prev f1-score:", f1_score(y_true, prev_y_pred_rounded))
-    # print("New f1-score:", performance_results["f1-score"])
-
-    # AUC - tensorflow
-    # m = tf.keras.metrics.AUC(num_thresholds=1000)
-    # m.update_state(y_true, y_pred)
-    # m.update_state([0, 0, 1, 1], [0, 0.5, 0.55, 0.6])
-    # print(m.result().numpy())
-    # print(float(m.result()))
-    # performance_results["AUC"] = float(m.result())
-    # print("tf AUC:", float(m.result()))
-
-    # tensorflow - Precision
-    # m = tf.keras.metrics.Precision()
-    # m.update_state(y_true, y_pred_rounded)
-    # performance_results["Precision"] = float(m.result().numpy())
-
-    # tensorflow - Recall
-    # m = tf.keras.metrics.Recall()
-    # m.update_state(y_true, y_pred_rounded)
-    # performance_results["Recall"] = float(m.result().numpy())
-
     if find_optimal_threshold:
         return performance_results, threshold
     return performance_results
-
-
-# This function is rank based. No longer used
-def get_best_hyper_params_OLD(all_val_results, ordered_configurations):
-    # Compute the 'rank' for each configuration. 'rank' is the sum of the number of configurations that have better
-    # results for a given performance measure,  squared, for each measure in selected_measure.
-    # Thus, the lower the rank, the better
-
-    # Measures we look at for determining rank
-    selected_measures = ["Binary accuracy", "AUC", "f1-score"]
-    ranks = []
-    for i in range(len(ordered_configurations)):
-        total_rank = 0
-        for performance_measure in selected_measures:
-            temp_rank = 0
-            for j in range(len(all_val_results[performance_measure])):
-                # When computing rank, do not compare configuration to itself
-                if i == j:
-                    continue
-                # If some other configuration performs better for some measure, rank increases by 1
-                if (all_val_results[performance_measure][i] < all_val_results[performance_measure][j]) and \
-                        ("loss" not in performance_measure.lower()):
-                    temp_rank += 1
-                elif (all_val_results[performance_measure][i] > all_val_results[performance_measure][j]) and \
-                        ("loss" in performance_measure.lower()):
-                    temp_rank += 1
-            # Squaring avoids 'imbalances' between temp_ranks
-            total_rank += temp_rank ** 2
-        ranks.append(total_rank)
-    return ordered_configurations[ranks.index(min(ranks))]
-
-
-# Score based system, but only considers validation results, not the inner train results
-def get_best_hyper_params_OLD_2(all_val_results, all_configurations):
-    """
-    This function takes in all of the validation results from grid search and the corresponding configurations,
-    and it returns what the best configuration of hyper-parameters is, based on these results
-    :param all_val_results: dictionary storing all of the average results acquired from grid search, for each possible
-                            hyper-param configuration. Specifically, each key stores a list of all the averages for some
-                            performance measure, for all the different hyper-param configurations tested
-    :param all_configurations: The i'th entry in any of the lists stored in val_results corresponds to the results
-                                   given the i'th configuration in all_configurations
-    :return: Best hyper-params (i.e one with highest score), considering the validation results
-    """
-    print("all_val_results:")
-    for measure in all_val_results:
-        print(measure + ":", all_val_results[measure])
-    print("All configurations:")
-    print(all_configurations)
-
-    # Measures we look at for determining scores. Scores are the squared sum of these results
-    selected_measures = ["Binary accuracy", "AUC", "f1-score"]
-    scores = []
-    for i in range(len(all_configurations)):
-        cur_score = 0
-        for performance_measure in selected_measures:
-            # Square rooting gives preference to results that have less 'imbalances' between performance measures
-            cur_score += math.sqrt(all_val_results[performance_measure][i])
-        scores.append(cur_score)
-
-    print("Scores:", scores, "\n")
-
-    best_index = scores.index(max(scores))
-    # Return index of hyper-parameters corresponding to the highest score (or first highest if there are ties)
-    return all_configurations[best_index], best_index
-
-
-def get_best_hyper_params_OLD_3(all_train_results, all_val_results, all_configurations):
-    """
-    This function takes in all of the validation results from grid search and the corresponding configurations,
-    and it returns what the best configuration of hyper-parameters is, based on these results
-    :param all_train_results: Analogous to all_val_results, but for the inner training set results
-    :param all_val_results: dictionary storing all of the average results acquired from grid search, for each possible
-                            hyper-param configuration. Specifically, each key stores a list of all the averages for some
-                            performance measure, for all the different hyper-param configurations tested
-    :param all_configurations: The i'th entry in any of the lists stored in val_results corresponds to the results
-                                   given the i'th configuration in all_configurations
-    :return: Best hyper-params (i.e one with highest score), considering the validation results
-    """
-    print("\nall_train_results (averages):")
-    for measure in all_train_results:
-        print(measure + ":", all_train_results[measure])
-    print("\nall_val_results (averages):")
-    for measure in all_val_results:
-        print(measure + ":", all_val_results[measure])
-    print("\nAll configurations:")
-    print(all_configurations)
-
-    # Measures we look at for determining scores. Scores are the squared rooted, sum of these results
-    selected_measures = ["Binary accuracy", "AUC", "f1-score"]
-    scores = []
-    for i in range(len(all_configurations)):
-        cur_score = 0
-        for performance_measure in selected_measures:
-            # Square rooting gives preference to results that have less 'imbalances' between performance measures
-            cur_train_score = math.sqrt(all_train_results[performance_measure][i])
-            cur_val_score = math.sqrt(all_val_results[performance_measure][i])
-            cur_score += cur_train_score + cur_val_score
-        # Scores are normalized so they fall in the range [0,1] - doesn't affect which hyper-params chosen since
-        # scores all multiplied by the same scalar
-        scores.append((cur_score / len(selected_measures)) / 2)
-
-    print("\nScores:\n", scores, "\n")
-
-    best_index = scores.index(max(scores))
-    # Return index of hyper-parameters corresponding to the highest score (or first highest if there are ties)
-    return all_configurations[best_index], best_index
 
 
 def get_best_hyper_params(all_val_results, all_configurations):
@@ -236,11 +102,10 @@ def regular_cv(train_set, k, hyper_params, epochs_list, fixed_length_for_time_se
     # We have E validation results dictionaries, where E = len(epochs_list). Same for training results
     all_train_results = []
     all_val_results = []
-    optimal_thresholds = []
+
     for _ in epochs_list:
         all_val_results.append(performance_measures_dict())
         all_train_results.append(performance_measures_dict())
-        optimal_thresholds.append(0.0)
 
     inner_folds = split_dataset_into_k_folds(train_set, k)
     for i in range(k):
@@ -297,21 +162,14 @@ def regular_cv(train_set, k, hyper_params, epochs_list, fixed_length_for_time_se
 
             # test on val set and record results (in order val sets are tested)
             # Done for each epochs value
-            cur_val_results, optimal_threshold = \
-                compute_performance_measures(model, inner_val_set, find_optimal_threshold=True)
-            cur_train_results = compute_performance_measures(model, inner_train_set, threshold=optimal_threshold)
-            # print("\nResults for inner training set, for different number of epochs:\n", cur_train_results)
-            # print("\nResults for val set, for different number of epochs:\n", cur_val_results)
+            cur_train_results = compute_performance_measures(model, inner_train_set)
+            cur_val_results = compute_performance_measures(model, inner_val_set)
 
             for performance_measure in all_val_results[0]:
                 all_train_results[j][performance_measure].append(cur_train_results[performance_measure])
                 all_val_results[j][performance_measure].append(cur_val_results[performance_measure])
 
-            # Optimal threshold for some configuration of hyper-params is the average of the ones found using each of
-            # the k val sets
-            optimal_thresholds[j] += optimal_threshold / k
-
-    return all_train_results, all_val_results, optimal_thresholds
+    return all_train_results, all_val_results
 
 
 def grid_search_cv(train_set, k, hyper_params_grid, fixed_length_for_time_series, data_augmentation):
@@ -333,7 +191,6 @@ def grid_search_cv(train_set, k, hyper_params_grid, fixed_length_for_time_series
     all_average_val_results = performance_measures_dict()
     all_average_train_results = performance_measures_dict()
     ordered_configurations = []
-    all_optimal_thresholds = []
 
     for i in range(len(hyper_param_combinations)):
 
@@ -401,7 +258,6 @@ def grid_search_cv(train_set, k, hyper_params_grid, fixed_length_for_time_series
             temp = cur_hyper_params.copy()
             temp.insert(0, hyper_params_grid["epochs"][e])
             ordered_configurations.insert(j, temp)
-            all_optimal_thresholds.insert(j, cur_optimal_thresholds[e])
 
     # print("\nAll average validation results and corresponding, ordered configurations (best hyper-params used to do",
     #       "final training)")
@@ -409,7 +265,7 @@ def grid_search_cv(train_set, k, hyper_params_grid, fixed_length_for_time_series
     # print(ordered_configurations)
     # exit()
 
-    return all_average_train_results, all_average_val_results, ordered_configurations, all_optimal_thresholds
+    return all_average_train_results, all_average_val_results, ordered_configurations
 
 
 def nested_cv(dataset, k_outer, k_inner, hyper_params_grid, fixed_length_for_time_series, data_augmentation=None):
@@ -433,7 +289,7 @@ def nested_cv(dataset, k_outer, k_inner, hyper_params_grid, fixed_length_for_tim
         # print("Test set surgeries:", test_set.surgeries_stats["surgeries"], "\n")
 
         # GRID SEARCH
-        inner_train_results, inner_val_results, ordered_configurations, optimal_thresholds = \
+        inner_train_results, inner_val_results, ordered_configurations = \
             grid_search_cv(train_set, k_inner, hyper_params_grid, fixed_length_for_time_series, data_augmentation)
 
         # print("\nFinished grid search...")
@@ -444,11 +300,9 @@ def nested_cv(dataset, k_outer, k_inner, hyper_params_grid, fixed_length_for_tim
         # print(ordered_configurations)
 
         best_hyper_params, best_index = get_best_hyper_params(inner_val_results, ordered_configurations)
-        optimal_threshold = optimal_thresholds[best_index]
 
         print("\nBest hyper-params found:")
         print(best_hyper_params)
-        print("Optimal threshold:", optimal_threshold, "\n")
         # exit()
 
         # Prepare train and test sets
@@ -483,8 +337,8 @@ def nested_cv(dataset, k_outer, k_inner, hyper_params_grid, fixed_length_for_tim
 
         # Compute training set and test set results
         # print("\n\nMaking predictions on test set using model with optimal hyper-parameters...")
-        cur_train_results = compute_performance_measures(model, train_set, threshold=optimal_threshold)
-        cur_test_results = compute_performance_measures(model, test_set, threshold=optimal_threshold)
+        cur_train_results = compute_performance_measures(model, train_set)
+        cur_test_results = compute_performance_measures(model, test_set)
         print("\nResults for outer training set:\n", cur_train_results)
 
         # print("\nRetraining model, expecting ~same training results...")
@@ -516,5 +370,4 @@ def nested_cv(dataset, k_outer, k_inner, hyper_params_grid, fixed_length_for_tim
 
         print("Done test " + str(i + 1) + "\\" + str(k_outer) + "...\n")
 
-    return outer_folds, all_best_inner_train_results, all_best_val_results, all_train_results, all_test_results, \
-        optimal_configurations
+    return outer_folds, all_best_inner_train_results, all_best_val_results, all_train_results, all_test_results

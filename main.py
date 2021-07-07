@@ -46,7 +46,7 @@ HYPER_PARAMETERS_GRID = {
 
 def main():
 
-    seed(1)
+    # seed(1)
 
     tic = time.perf_counter()
 
@@ -59,8 +59,8 @@ def main():
     # )
 
     dataset = load_dataset(DATASET_PATH, SEQUENCE_TYPES)
-    outer_folds, all_best_inner_train_results, all_best_val_results, all_train_results, all_test_results, optimal_configurations \
-        = nested_cv(dataset, K_OUTER, K_INNER, HYPER_PARAMETERS_GRID, TIME_SERIES_LENGTH_FOR_MODEL)
+    outer_folds, all_best_inner_train_results, all_best_val_results, all_train_results, all_test_results = \
+        nested_cv(dataset, K_OUTER, K_INNER, HYPER_PARAMETERS_GRID, TIME_SERIES_LENGTH_FOR_MODEL)
 
     toc = time.perf_counter()
 
