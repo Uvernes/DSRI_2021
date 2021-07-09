@@ -1,11 +1,13 @@
 import itertools
 import math
+import model_related.utils as ut
+import tensorflow as tf
 from statistics import mean
 from sklearn.metrics import f1_score, roc_curve, auc, precision_score, recall_score, accuracy_score
-import model_related.utils as ut
 from model_related.model_methods import build_compile_and_fit_model
 from utility.conversion_methods import *
-from utility.k_folds_methods import split_dataset_into_k_folds,  join_folds
+from utility.k_folds_methods import split_dataset_into_k_folds, join_folds
+from copy import copy
 
 
 VALIDATION_PERFORMANCE_MEASURES = ["Binary crossentropy loss", "Binary accuracy", "AUC", "f1-score",
@@ -61,22 +63,28 @@ def compute_performance_measures(model, set, threshold=0.5, find_optimal_thresho
     return performance_results
 
 
-def get_best_hyper_params(all_val_results, all_configurations):
+def get_best_model(all_val_results, all_configurations, all_models):
     """
     This function takes in all of the validation results from grid search and the corresponding configurations,
-    and it returns what the best configuration of hyper-parameters is, based on these results
-    :param all_val_results: dictionary storing all of the average results acquired from grid search, for each possible
-                            hyper-param configuration. Specifically, each key stores a list of all the averages for some
-                            performance measure, for all the different hyper-param configurations tested
-    :param all_configurations: The i'th entry in any of the lists stored in val_results corresponds to the results
-                                   given the i'th configuration in all_configurations
-    :return: Best hyper-params (i.e one with highest score), considering the validation results
+    and it returns the best model, as well as the corresponding hyper-parameters and index
+    :param all_val_results: A list of dictionaries for each configuration. Each dictionary stores all val results
+                            for a given configuration
+    :param all_configurations: The i'th dictionary in all_val_results corresponds to the results for the i'th
+                               configuration in all_configurations
+    :return: best model (i.e one with highest score), as well as the corresponding index
     """
-    print("\nall_val_results (averages):")
-    for measure in all_val_results:
-        print(measure + ":", all_val_results[measure])
-    print("\nAll configurations:")
-    print(all_configurations)
+    # Dictionary with performance measures as keys. Values are lists storing the average results for a particular performance
+    # measure, for each configuration. So values are lists of average results that are parallel to all_configurations
+    average_val_results = performance_measures_dict()
+    for results in all_val_results:
+        for measure in VALIDATION_PERFORMANCE_MEASURES:
+            average_val_results[measure].append(mean(results[measure]))
+
+    print("\naverage_val_results, for each configuration:")
+    print(average_val_results)
+
+    # print("\nAll configurations:")
+    # print(all_configurations)
 
     # Measures we look at for determining scores. Scores are the squared rooted, sum of these results
     selected_measures = ["Binary accuracy", "AUC", "f1-score"]
@@ -85,16 +93,34 @@ def get_best_hyper_params(all_val_results, all_configurations):
         cur_score = 0
         for performance_measure in selected_measures:
             # Square rooting gives preference to results that have less 'imbalances' between performance measures
-            cur_score += math.sqrt(all_val_results[performance_measure][i])
+            cur_score += math.sqrt(average_val_results[performance_measure][i])
             # Scores are normalized so they fall in the range [0,1] - doesn't affect which hyper-params chosen since
             # scores all multiplied by the same scalar
         scores.append((cur_score / len(selected_measures)))
 
     print("\nScores:\n", scores, "\n")
 
-    best_index = scores.index(max(scores))
+    best_hyper_params_index = scores.index(max(scores))
+
+    # From the K_INNER models trained using the best hyper parameters, select the one with the best individual val
+    # results.
+    candidate_models = all_models[best_hyper_params_index]
+    best_model = None
+    best_model_index = 0
+    best_score = -1
+
+    for i in range(len(candidate_models)):
+        # Compute individual score for the current model
+        cur_score = 0
+        for performance_measure in selected_measures:
+            cur_score += math.sqrt(all_val_results[best_hyper_params_index][performance_measure][i])
+        if cur_score > best_score:
+            best_score = cur_score
+            best_model = all_models[best_hyper_params_index][i]
+            best_model_index = i
+
     # Return index of hyper-parameters corresponding to the highest score (or first highest if there are ties)
-    return all_configurations[best_index], best_index
+    return best_model, best_hyper_params_index, best_model_index
 
 
 # i.e non-nested cv. Computes all performance measures of interest, for each fold, for various # of epochs
@@ -103,9 +129,14 @@ def regular_cv(train_set, k, hyper_params, epochs_list, fixed_length_for_time_se
     all_train_results = []
     all_val_results = []
 
+    # Store the (K_INNER) models trained for each hyper parameter dictionary. i.e models is a 2D list, where the
+    # inner list at index i stores the (K_INNER) models for the i'th configurations (configs differ by # of epochs)
+    models = []
+
     for _ in epochs_list:
         all_val_results.append(performance_measures_dict())
         all_train_results.append(performance_measures_dict())
+        models.append([])
 
     inner_folds = split_dataset_into_k_folds(train_set, k)
     for i in range(k):
@@ -169,12 +200,13 @@ def regular_cv(train_set, k, hyper_params, epochs_list, fixed_length_for_time_se
                 all_train_results[j][performance_measure].append(cur_train_results[performance_measure])
                 all_val_results[j][performance_measure].append(cur_val_results[performance_measure])
 
-    return all_train_results, all_val_results
+            # Store copy of model
+            models[j].append(copy(model))
+
+    return all_train_results, all_val_results, models
 
 
 def grid_search_cv(train_set, k, hyper_params_grid, fixed_length_for_time_series, data_augmentation):
-    # We do some sorting based on measure below. Doesn't effect anything, just for visual reasons
-    val_performance_measure = "Binary accuracy"
 
     # Stores all hyper-parameter combinations to try out in grid search - EXCLUDING epochs
     hyper_param_combinations = []
@@ -184,13 +216,15 @@ def grid_search_cv(train_set, k, hyper_params_grid, fixed_length_for_time_series
             continue
         hyper_param_combinations.append(hyper_params_grid[hyper_param])
     hyper_param_combinations = list(itertools.product(*hyper_param_combinations))
-    # print("Combinations:")
-    # print(hyper_param_combinations)
-    # exit()
 
-    all_average_val_results = performance_measures_dict()
-    all_average_train_results = performance_measures_dict()
-    ordered_configurations = []
+    # For the two variables below, we have a list of dictionaries, one for each hyper-parameter combination (including epochs).
+    # Each dictionary stores either train or val results, where the results are obtained in inner cv
+    all_train_results = []
+    all_val_results = []
+    # Stores all hyper-param configurations, where epochs are included
+    all_configurations = []
+    # Stores all the trained models, for each configuration. Each configuration has (K_INNER) models.
+    all_models = []
 
     for i in range(len(hyper_param_combinations)):
 
@@ -206,58 +240,18 @@ def grid_search_cv(train_set, k, hyper_params_grid, fixed_length_for_time_series
 
         # cur_val_results returns the results for E fixed hyper-parameter configurations, where E is the # of
         # epochs values in the grid passed in (i.e a list of E dictionaries)
-        cur_train_results, cur_val_results, cur_optimal_thresholds = \
+        cur_train_results, cur_val_results, cur_models = \
             regular_cv(train_set, k, hyper_params_dict, hyper_params_grid["epochs"], fixed_length_for_time_series, data_augmentation)
 
-        # print("Current training results for some fixed hyper-param combination, for various epoch values:")
-        # print(cur_train_results)
-
-        # The various lists of validation performance measures are averaged, for each of the E dictionaries
-        cur_average_train_results = []
-        cur_average_val_results = []
-        for j in range(len(cur_val_results)):
-            cur_average_train_results.append(dict())
-            cur_average_val_results.append(dict())
-            for performance_measure in cur_val_results[j]:
-                cur_average_train_results[j][performance_measure] = mean(cur_train_results[j][performance_measure])
-                cur_average_val_results[j][performance_measure] = mean(cur_val_results[j][performance_measure])
-
-        # print("\nCurrent validation performances:")
-        # print(cur_val_results)
-
-        # print("\nAveraged results for a fixed hyper-param configuration: ")
-        # print(cur_average_val_results)
-        #
-        # print("\nall_average_val_results before appending:")
-        # print(all_average_val_results)
-
-        # Store all results, for each of the E dictionaries
+        # Store all results, for each of the E dictionaries (i.e configurations, where epochs is now fixed)
         for e in range(len(hyper_params_grid["epochs"])):
-            # Stores the average results for some fixed hyper-parameter combination, where # of epochs is also fixed
-            single_train_results_dictionary = cur_average_train_results[e]
-            single_val_results_dictionary = cur_average_val_results[e]
-            # Add current results to all results in descending order, where we descend w.r.t val_performance_measure
-            j = 0
-            # e.g if val_performance_measure is "AUC", variable below stores a list of AUC averages
-            measures_of_interest = all_average_val_results[val_performance_measure]
-            while j < len(measures_of_interest):
-                if (single_val_results_dictionary[val_performance_measure] > measures_of_interest[j]) and \
-                        ("loss" not in val_performance_measure):
-                    break
-                # Accounts for fact that unlike other performance measures, we want loss to be minimized, not maximized
-                if (single_val_results_dictionary[val_performance_measure] < measures_of_interest[j]) and \
-                        ("loss" in val_performance_measure):
-                    break
-                j += 1
-            for performance_measure in all_average_val_results:
-                all_average_train_results[performance_measure].insert(j, single_train_results_dictionary[
-                    performance_measure])
-                all_average_val_results[performance_measure].insert(j,
-                                                                    single_val_results_dictionary[performance_measure])
+            all_train_results.append(cur_train_results[e])
+            all_val_results.append(cur_val_results[e])
             # Adds info about the num of epochs to the given hyper-param combination. Added to front of list
             temp = cur_hyper_params.copy()
             temp.insert(0, hyper_params_grid["epochs"][e])
-            ordered_configurations.insert(j, temp)
+            all_configurations.append(temp)
+            all_models.append(cur_models[e])
 
     # print("\nAll average validation results and corresponding, ordered configurations (best hyper-params used to do",
     #       "final training)")
@@ -265,14 +259,13 @@ def grid_search_cv(train_set, k, hyper_params_grid, fixed_length_for_time_series
     # print(ordered_configurations)
     # exit()
 
-    return all_average_train_results, all_average_val_results, ordered_configurations
+    return all_train_results, all_val_results, all_configurations, all_models
 
 
 def nested_cv(dataset, k_outer, k_inner, hyper_params_grid, fixed_length_for_time_series, data_augmentation=None):
-    # Stores the average validation results for all of the best hyper-parameters found
+    # Stores the results for all of the best hyper-parameters found
     all_best_val_results = performance_measures_dict()
-    all_best_inner_train_results = performance_measures_dict()
-    all_train_results = performance_measures_dict()
+    all_best_train_results = performance_measures_dict()
     all_test_results = performance_measures_dict()
     optimal_configurations = []
 
@@ -289,85 +282,73 @@ def nested_cv(dataset, k_outer, k_inner, hyper_params_grid, fixed_length_for_tim
         # print("Test set surgeries:", test_set.surgeries_stats["surgeries"], "\n")
 
         # GRID SEARCH
-        inner_train_results, inner_val_results, ordered_configurations = \
+        train_results, val_results, all_configurations, all_models = \
             grid_search_cv(train_set, k_inner, hyper_params_grid, fixed_length_for_time_series, data_augmentation)
 
-        # print("\nFinished grid search...")
-        # print("\nValidation results:")
-        # for performance_measure in inner_val_results:
-        #     print(performance_measure + ":", inner_val_results[performance_measure])
-        # print("\nCorresponding Hyper-parameter configurations:")
-        # print(ordered_configurations)
-
-        best_hyper_params, best_index = get_best_hyper_params(inner_val_results, ordered_configurations)
+        # Get best model and corresponding results. No longer training a final, outer model
+        model, hyper_params_index, model_index = get_best_model(val_results, all_configurations, all_models)
+        best_hyper_params = all_configurations[hyper_params_index]
+        train_results = train_results[hyper_params_index]
+        val_results = val_results[hyper_params_index]
 
         print("\nBest hyper-params found:")
         print(best_hyper_params)
-        # exit()
 
-        # Prepare train and test sets
-        train_set = participants_storage_to_dictionary(train_set)
+        # Prepare test set
         test_set = participants_storage_to_dictionary(test_set)
-
-        # ------- Apply data augmentation to training set here ------ #
-        if data_augmentation is not None:
-            # train_set enhanced
-            synthetic_dataset = data_augmentation.execute(train_set)
-            train_set = join_dataset_dictionaries(train_set, synthetic_dataset)
-
-        change_format_of_time_series(train_set)
         change_format_of_time_series(test_set)
-
-        zero_pad_time_series(train_set, fixed_length=fixed_length_for_time_series)
         zero_pad_time_series(test_set, fixed_length=fixed_length_for_time_series)
-
-        train_set = ut.split_set_into_x_and_y(train_set)
         test_set = ut.split_set_into_x_and_y(test_set)
 
-        # Fit model on entire training set
-        # best_hyper_params = ordered_configurations[0]
-        hyper_params_dict = dict()
-        index = 0
-        for key in hyper_params_grid:
-            hyper_params_dict[key] = best_hyper_params[index]
-            index += 1
-
-        print("Hyper params used to train outer model:", hyper_params_dict)
-        model = build_compile_and_fit_model(hyper_params_dict, train_set)
-
-        # Compute training set and test set results
-        # print("\n\nMaking predictions on test set using model with optimal hyper-parameters...")
-        cur_train_results = compute_performance_measures(model, train_set)
+        # Compute test set results - already have (inner) training results. Must recompile ?
+        # model.compile(
+        #     optimizer=tf.keras.optimizers.Adam(learning_rate=best_hyper_params[5]),
+        #     loss='binary_crossentropy',
+        #     metrics=['binary_accuracy']
+        # )
         cur_test_results = compute_performance_measures(model, test_set)
-        print("\nResults for outer training set:\n", cur_train_results)
 
-        # print("\nRetraining model, expecting ~same training results...")
-        # model = build_compile_and_fit_model(hyper_params_dict, train_set)
-        # cur_train_results = compute_performance_measures(model, train_set)
-        # print("\nRepeated results for outer training set:\n", cur_train_results)
-
-        print("\nResults for test set:\n", cur_test_results)
-
-        # print("Average validation results for best hyper-params found:")
-        # for measure in inner_val_results:
-        #     print(measure + ":", inner_val_results[measure][best_index])
-        #
-        # print("\nCurrent train results:")
-        # for measure in cur_train_results:
-        #     print(measure + ":", cur_train_results[measure])
-        #
-        # print("\nCurrent test results:")
-        # for measure in cur_test_results:
-        #     print(measure + ":", cur_test_results[measure])
-        # print()
+        print("\nCurrent train results:")
+        for measure in train_results:
+            print(measure + ":", train_results[measure][model_index])
+        print("\nCurrent val results:")
+        for measure in val_results:
+            print(measure + ":", val_results[measure][model_index])
+        print("\nCurrent test results:")
+        for measure in cur_test_results:
+            print(measure + ":", cur_test_results[measure])
 
         for performance_measure in all_test_results:
-            all_best_inner_train_results[performance_measure].append(inner_train_results[performance_measure][best_index])
-            all_best_val_results[performance_measure].append(inner_val_results[performance_measure][best_index])
-            all_train_results[performance_measure].append(cur_train_results[performance_measure])
+            all_best_train_results[performance_measure].append(train_results[performance_measure][model_index])
+            all_best_val_results[performance_measure].append(val_results[performance_measure][model_index])
             all_test_results[performance_measure].append(cur_test_results[performance_measure])
         optimal_configurations.append(best_hyper_params)
 
         print("Done test " + str(i + 1) + "\\" + str(k_outer) + "...\n")
 
-    return outer_folds, all_best_inner_train_results, all_best_val_results, all_train_results, all_test_results
+    return outer_folds, all_best_train_results, all_best_val_results, all_test_results, optimal_configurations
+
+
+# Averaging related code:
+# print("Current training results for some fixed hyper-param combination, for various epoch values:")
+# print(cur_train_results)
+
+# # The various lists of validation performance measures are averaged, for each of the E dictionaries
+# cur_average_train_results = []
+# cur_average_val_results = []
+# for j in range(len(cur_val_results)):
+#     cur_average_train_results.append(dict())
+#     cur_average_val_results.append(dict())
+#     for performance_measure in cur_val_results[j]:
+#         cur_average_train_results[j][performance_measure] = mean(cur_train_results[j][performance_measure])
+#         cur_average_val_results[j][performance_measure] = mean(cur_val_results[j][performance_measure])
+
+# print("\nCurrent validation performances:")
+# print(cur_val_results)
+
+# print("\nAveraged results for a fixed hyper-param configuration: ")
+# print(cur_average_val_results)
+#
+# print("\nall_average_val_results before appending:")
+# print(all_average_val_results)
+

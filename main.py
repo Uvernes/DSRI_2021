@@ -1,6 +1,5 @@
 import time
-# import os
-# os.environ["CUDA_VISIBLE_DEVICES"] = "-1"  # uncomment to disable use of GPU
+import os
 import tensorflow as tf
 from model_related.classes import *
 from utility.data_extraction_and_storage_methods import load_dataset
@@ -14,18 +13,17 @@ DATASET_PATH = r"C:\Users\uvern\Dropbox\My PC (LAPTOP-554U8A6N)\Documents\DSRI\D
 SEQUENCE_TYPES = ["NeedleTipToReference"]
 TIME_SERIES_LENGTH_FOR_MODEL = 2200  # Average time series length is ~258.61 , longest is 2191
 SLICE_WINDOW = 70  # originally 70
-RESULTS_FILE = "example.txt"
+RESULTS_FILE = "results_1.txt"
 
 # Used k_outer = 5 , k_inner = 3 or 5
 K_OUTER = 2
 K_INNER = 2  # or 4 (so val and test set ~same size)
 
-
 # 3 * 3 * 3 * 3 = 81 combinations
 # Note: Dictionaries in Python 3.7+ store keys in insertion order. This fact is used
 # HYPER_PARAMETERS_GRID = {
-#     "epochs":           list(range(100, 501, 50)),             # originally 300 (don't tune, use callbacks?)
-#     "kernel-size":      [3, 5, 10],                            # originally 5 (7, 10?)
+#     "epochs":           list(range(50, 501, 50)),             # originally 300 (don't tune, use callbacks?)
+#     "kernel-size":      [3, 5, 7],                            # originally 5 (7, 10?) ** avoid even numbers
 #     "filters":          [8, 16, 32],                           # originally 64
 #     "batch-size":       [32],                                  # originally 32
 #     "dropout-rate":     [0.0, 0.2, 0.5],                       # originally 0.5
@@ -34,18 +32,18 @@ K_INNER = 2  # or 4 (so val and test set ~same size)
 # }
 
 HYPER_PARAMETERS_GRID = {
-    "epochs":           [5],                          # list(range(100, 501, 50))
-    "kernel-size":      [15],                                # [3, 5, 10]
-    "filters":          [32],                               # [8, 16] or [64]
+    "epochs":           [10],                          # list(range(100, 501, 50))
+    "kernel-size":      [3],                                # [3, 5, 10]
+    "filters":          [16],                               # [8, 16] or [64]
     "batch-size":       [32],                               # originally 32
     "dropout-rate":     [0.2],                              # originally 0.5
-    "learning-rate":    [0.1],                              # [0.01, 0.02]
-    "regularizer":      [0.0]                              # originally 0.05
+    "learning-rate":    [0.001],                              # [0.01, 0.02]
+    "regularizer":      [0.05]                              # originally 0.05
 }
 
 
 def main():
-
+    os.environ["CUDA_VISIBLE_DEVICES"] = "-1"  # uncomment to use GPU
     # seed(1)
 
     tic = time.perf_counter()
@@ -59,7 +57,7 @@ def main():
     # )
 
     dataset = load_dataset(DATASET_PATH, SEQUENCE_TYPES)
-    outer_folds, all_best_inner_train_results, all_best_val_results, all_train_results, all_test_results, optimal_configurations \
+    outer_folds, all_best_train_results, all_best_val_results, all_test_results, optimal_configurations \
         = nested_cv(dataset, K_OUTER, K_INNER, HYPER_PARAMETERS_GRID, TIME_SERIES_LENGTH_FOR_MODEL)
 
     toc = time.perf_counter()
@@ -84,34 +82,32 @@ def main():
     # Print mean of results
     lists_to_print = []
     for performance_measure in all_test_results:
-        lists_to_print.append([performance_measure, mean(all_best_inner_train_results[performance_measure]),
-                               mean(all_best_val_results[performance_measure]), mean(all_train_results[performance_measure]),
-                               mean(all_test_results[performance_measure])])
+        lists_to_print.append([performance_measure, mean(all_best_train_results[performance_measure]),
+                               mean(all_best_val_results[performance_measure]), mean(all_test_results[performance_measure])])
     print(tabulate(tabular_data=lists_to_print,
-                   headers=["Performance measure", "Best inner train results - mean", "Best validation results - mean",
-                            "Training - mean", "Tests - mean"]))
+                   headers=["Performance measure", "Training results - mean", "Validation results - mean",
+                            "Tests - mean"]))
 
     # Print std of results
     print("\n")
     lists_to_print = []
     for performance_measure in all_test_results:
-        lists_to_print.append([performance_measure, stdev(all_best_inner_train_results[performance_measure]),
-                               stdev(all_best_val_results[performance_measure]), stdev(all_train_results[performance_measure]),
-                               stdev(all_test_results[performance_measure])])
+        lists_to_print.append([performance_measure, stdev(all_best_train_results[performance_measure]),
+                               stdev(all_best_val_results[performance_measure]), stdev(all_test_results[performance_measure])])
     print(tabulate(tabular_data=lists_to_print,
-                   headers=["Performance measure", "Best inner train results - stdev", "Best validation results - stdev",
-                            "Training - stdev", "Tests - stdev"]))
+                   headers=["Performance measure", "Best train results - stdev", "Best validation results - stdev",
+                            "Tests - stdev"]))
 
-    print("\n\nAverage inner training results for all best hyper-params found")
+    print("\n\nTraining results for all best hyper-params found")
     print("----------------------------------------------------------\n")
     lists_to_print = []
     for i in range(len(optimal_configurations)):
         lists_to_print.append(["Result #" + str(i+1)])
-        for performance_measure in all_best_inner_train_results:
-            lists_to_print[i].append(all_best_inner_train_results[performance_measure][i])
+        for performance_measure in all_best_train_results:
+            lists_to_print[i].append(all_best_train_results[performance_measure][i])
     print(tabulate(tabular_data=lists_to_print, headers=["Result"]+list(all_test_results.keys())))
 
-    print("\n\nAverage validation results for all best hyper-params found")
+    print("\n\nValidation results for all best hyper-params found")
     print("----------------------------------------------------------\n")
     lists_to_print = []
     for i in range(len(optimal_configurations)):
@@ -119,15 +115,6 @@ def main():
         for performance_measure in all_best_val_results:
             lists_to_print[i].append(all_best_val_results[performance_measure][i])
     print(tabulate(tabular_data=lists_to_print, headers=["Result"]+list(all_test_results.keys())))
-
-    print("\n\nAll training results")
-    print("--------------------\n")
-    lists_to_print = []
-    for i in range(len(optimal_configurations)):
-        lists_to_print.append(["Set #" + str(i+1)])
-        for performance_measure in all_train_results:
-            lists_to_print[i].append(all_train_results[performance_measure][i])
-    print(tabulate(tabular_data=lists_to_print, headers=["Training set"]+list(all_test_results.keys())))
 
     print("\n\nAll test results")
     print("----------------\n")
