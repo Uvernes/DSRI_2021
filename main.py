@@ -22,28 +22,28 @@ K_INNER = 2  # or 4 (so val and test set ~same size)
 # 3 * 3 * 3 * 3 = 81 combinations
 # Note: Dictionaries in Python 3.7+ store keys in insertion order. This fact is used
 # HYPER_PARAMETERS_GRID = {
-#     "epochs":           list(range(50, 501, 50)),             # originally 300 (don't tune, use callbacks?)
-#     "kernel-size":      [3, 5, 7],                            # originally 5 (7, 10?) ** avoid even numbers
-#     "filters":          [8, 16, 32],                           # originally 64
-#     "batch-size":       [32],                                  # originally 32
-#     "dropout-rate":     [0.0, 0.2, 0.5],                       # originally 0.5
-#     "learning-rate":    [0.0001, 0.001, 0.01],                 # originally 0.0001
-#     "regularizer":      [0.05]                                 # originally 0.05
+#     "epochs":           list(range(100, 1001, 50)),             # originally 300 (don't tune, use callbacks?)
+#     "kernel-size":      [3, 5, 7],                              # originally 5 (7, 10?) ** avoid even numbers
+#     "filters":          [8, 16, 32],                            # originally 64
+#     "batch-size":       [32],                                   # originally 32
+#     "dropout-rate":     [0.0, 0.2, 0.5],                        # originally 0.5
+#     "learning-rate":    [0.0001, 0.0005, 0.001],                # originally 0.0001
+#     "regularizer":      [0, 0.05]                               # originally 0.05
 # }
 
 HYPER_PARAMETERS_GRID = {
-    "epochs":           [10],                          # list(range(100, 501, 50))
-    "kernel-size":      [3],                                # [3, 5, 10]
-    "filters":          [16],                               # [8, 16] or [64]
-    "batch-size":       [32],                               # originally 32
-    "dropout-rate":     [0.2],                              # originally 0.5
-    "learning-rate":    [0.001],                              # [0.01, 0.02]
-    "regularizer":      [0.05]                              # originally 0.05
+    "epochs":           list(range(100,1001,100)),           # list(range(100, 501, 50))
+    "kernel-size":      [10],                                # [3, 5, 10]
+    "filters":          [16],                                # [8, 16] or [64]
+    "batch-size":       [32],                                # originally 32
+    "dropout-rate":     [0.2],                               # originally 0.5
+    "learning-rate":    [0.0005],                            # [0.01, 0.02]
+    "regularizer":      [0.05]                               # originally 0.05
 }
 
 
 def main():
-    os.environ["CUDA_VISIBLE_DEVICES"] = "-1"  # uncomment to use GPU
+    # os.environ["CUDA_VISIBLE_DEVICES"] = "-1"  # comment out to use GPU
     # seed(1)
 
     tic = time.perf_counter()
@@ -85,7 +85,7 @@ def main():
         lists_to_print.append([performance_measure, mean(all_best_train_results[performance_measure]),
                                mean(all_best_val_results[performance_measure]), mean(all_test_results[performance_measure])])
     print(tabulate(tabular_data=lists_to_print,
-                   headers=["Performance measure", "Training results - mean", "Validation results - mean",
+                   headers=["Performance measure", "All training results - mean", "All validation results - mean",
                             "Tests - mean"]))
 
     # Print std of results
@@ -95,10 +95,10 @@ def main():
         lists_to_print.append([performance_measure, stdev(all_best_train_results[performance_measure]),
                                stdev(all_best_val_results[performance_measure]), stdev(all_test_results[performance_measure])])
     print(tabulate(tabular_data=lists_to_print,
-                   headers=["Performance measure", "Best train results - stdev", "Best validation results - stdev",
+                   headers=["Performance measure", "All training results - stdev", "All validation results - stdev",
                             "Tests - stdev"]))
 
-    print("\n\nTraining results for all best hyper-params found")
+    print("\n\nTraining results for best models found")
     print("----------------------------------------------------------\n")
     lists_to_print = []
     for i in range(len(optimal_configurations)):
@@ -107,7 +107,7 @@ def main():
             lists_to_print[i].append(all_best_train_results[performance_measure][i])
     print(tabulate(tabular_data=lists_to_print, headers=["Result"]+list(all_test_results.keys())))
 
-    print("\n\nValidation results for all best hyper-params found")
+    print("\n\nValidation results for best models found")
     print("----------------------------------------------------------\n")
     lists_to_print = []
     for i in range(len(optimal_configurations)):
