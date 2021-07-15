@@ -14,6 +14,7 @@ def shuffle(x_data, y_data):
     return np.array(x_shuffled), np.array(y_shuffled),
 
 
+# Seems good
 def split_set_into_x_and_y(dictionary):
     """
     This function takes in a dictionary storing time series data, and it returns 2 np arrays, the first corresponding

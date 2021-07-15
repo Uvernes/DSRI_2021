@@ -10,22 +10,19 @@ from utility.k_folds_methods import split_dataset_into_k_folds, join_folds
 from copy import copy
 
 
-VALIDATION_PERFORMANCE_MEASURES = ["Binary crossentropy loss", "Binary accuracy", "AUC", "f1-score",
-                                   "Precision", "Recall"]
-# SCORE_MEASURES = ["Binary accuracy", "AUC", "f1-score"]
-# LATER - DO MULTIPLE SCORE MEASURES, EACH DONE SEPARATELY <-- What sklearn does (optional)
-# Right score measure is hardcoded... , put in main after
-SCORE_MEASURES = ["f1-score"]
+PERFORMANCE_MEASURES = ["Binary crossentropy loss", "Binary accuracy", "AUC", "f1-score", "Precision", "Recall"]
+# LATER - ALLOW FOR MULTIPLE SCORE MEASURES, EACH DONE SEPARATELY <-- What sklearn does (optional)
 
 
 # Validation performances measures measured in regular_cv
 def performance_measures_dict():
     dictionary = dict()
-    for performance_measure in VALIDATION_PERFORMANCE_MEASURES:
+    for performance_measure in PERFORMANCE_MEASURES:
         dictionary[performance_measure] = []
     return dictionary
 
 
+# Seems good
 def compute_performance_measures(model, set, threshold=0.5, find_optimal_threshold=False):
     performance_results = dict()
     x = set[0]
@@ -67,6 +64,7 @@ def compute_performance_measures(model, set, threshold=0.5, find_optimal_thresho
     return performance_results
 
 
+# OLD - No longer used
 def get_best_model(all_val_results, all_configurations, all_models):
     """
     This function takes in all of the validation results from grid search and the corresponding configurations,
@@ -81,7 +79,7 @@ def get_best_model(all_val_results, all_configurations, all_models):
     # measure, for each configuration. So values are lists of average results that are parallel to all_configurations
     average_val_results = performance_measures_dict()
     for results in all_val_results:
-        for measure in VALIDATION_PERFORMANCE_MEASURES:
+        for measure in PERFORMANCE_MEASURES:
             average_val_results[measure].append(mean(results[measure]))
 
     print("\naverage_val_results, for each configuration:")
@@ -127,42 +125,30 @@ def get_best_model(all_val_results, all_configurations, all_models):
     return best_model, best_hyper_params_index, best_model_index
 
 
-def compute_score_given_results(results):
+# Seems good
+def compute_score_given_results(score_measure, results):
 
-    # Measures we look at for determining scores. Scores are the squared rooted, sum of these results
-    score = 0
-    for measure in SCORE_MEASURES:
-        # Square rooting gives preference to results that have less 'imbalances' between performance measures
-        score += math.sqrt(mean(results[measure]))
-
-    # Score is normalized so it falls in the range [0,1] - doesn't affect which hyper-params chosen since
-    # scores all multiplied by the same scalar
-    return score / len(SCORE_MEASURES)
+    return mean(results[score_measure])
 
 
-def find_best_individual_results(results):
+# Seems good
+def find_best_individual_results(score_measure, results):
 
-    best_index = None
-    best_score = -1
-    # Go through the results for each individual model
-    for i in range(len(results[SCORE_MEASURES[0]])):
-        cur_score = 0
-        for measure in VALIDATION_PERFORMANCE_MEASURES:
-            cur_score += math.sqrt(results[measure][i])
-        if cur_score > best_score:
-            best_score = cur_score
-            best_index = i
-    return best_index
+    if "loss" in score_measure.lower():
+        return results[score_measure].index(min(results[score_measure]))
+    else:
+        return results[score_measure].index((max(results[score_measure])))
 
 
 # i.e non-nested cv. Computes all performance measures of interest, for each fold, for various # of epochs
-def regular_cv(train_set, k, hyper_params, epochs_list, fixed_length_for_time_series, data_augmentation):
+# Seems good
+def regular_cv(train_set, k, hyper_params, epochs_list, fixed_length_for_time_series, data_augmentation, inner_folds=None):
     # We have E validation results dictionaries, where E = len(epochs_list). Same for training results
     all_train_results = []
     all_val_results = []
 
     # Store the (K_INNER) models trained for each hyper parameter dictionary. i.e models is a 2D list, where the
-    # inner list at index i stores the (K_INNER) models for the i'th configurations (configs differ by # of epochs)
+    # inner list at index i stores the (K_INNER) models for the i'th configuration (configs differ by # of epochs)
     models = []
 
     for _ in epochs_list:
@@ -170,7 +156,9 @@ def regular_cv(train_set, k, hyper_params, epochs_list, fixed_length_for_time_se
         all_train_results.append(performance_measures_dict())
         models.append([])
 
-    inner_folds = split_dataset_into_k_folds(train_set, k)
+    if inner_folds is None:
+        inner_folds = split_dataset_into_k_folds(train_set, k)
+
     for i in range(k):
 
         inner_train_set = join_folds(inner_folds[0:i] + inner_folds[i + 1:])
@@ -214,14 +202,13 @@ def regular_cv(train_set, k, hyper_params, epochs_list, fixed_length_for_time_se
                 # function below expects hyper_params to include the number of epochs
                 # Note: model is only built once, for the lowest 'number of epochs' value
                 hyper_params["epochs"] = epochs_list[j]
-                print("Number of epochs trained:", hyper_params["epochs"])
                 model = build_compile_and_fit_model(hyper_params, inner_train_set)
             else:
                 # Continues fitting model from where previous 'fitting' left off.
                 hyper_params["epochs"] = epochs_list[j] - epochs_list[j - 1]
-                print("Number of epochs trained:", hyper_params["epochs"])
                 model.fit(x=inner_train_set[0], y=inner_train_set[1], batch_size=hyper_params["batch-size"],
                           epochs=hyper_params["epochs"], verbose=0)
+            print("Number of epochs trained:", hyper_params["epochs"])
 
             # test on val set and record results (in order val sets are tested)
             # Done for each epochs value
@@ -238,7 +225,8 @@ def regular_cv(train_set, k, hyper_params, epochs_list, fixed_length_for_time_se
     return all_train_results, all_val_results, models
 
 
-def grid_search_cv(train_set, k, hyper_params_grid, fixed_length_for_time_series, data_augmentation):
+# Seems good
+def grid_search_cv(train_set, k, hyper_params_grid, fixed_length_for_time_series, score_measure, data_augmentation):
 
     # Stores all hyper-parameter combinations to try out in grid search - EXCLUDING epochs
     hyper_param_combinations = []
@@ -259,6 +247,9 @@ def grid_search_cv(train_set, k, hyper_params_grid, fixed_length_for_time_series
     best_hyper_params = None
     best_model = None
 
+    # Same folds used in inner cv by all hyper-param combinations
+    inner_folds = split_dataset_into_k_folds(train_set, k)
+
     for i in range(len(hyper_param_combinations)):
 
         # Extracting hyper-parameters to use, excluding epochs
@@ -275,12 +266,13 @@ def grid_search_cv(train_set, k, hyper_params_grid, fixed_length_for_time_series
         # epochs values in the grid passed in (i.e a list of E dictionaries)
         # Note: (K_INNER * E) models are returned.
         cur_train_results, cur_val_results, cur_models = \
-            regular_cv(train_set, k, hyper_params_dict, hyper_params_grid["epochs"], fixed_length_for_time_series, data_augmentation)
+            regular_cv(train_set, k, hyper_params_dict, hyper_params_grid["epochs"], fixed_length_for_time_series,
+                       data_augmentation, inner_folds)
 
         best_params_index = None
         # Check if there is any dictionary in cur_val_results which has a better avg val score than the current best
         for j in range(len(cur_val_results)):
-            cur_score = compute_score_given_results(cur_val_results[j])
+            cur_score = compute_score_given_results(score_measure, cur_val_results[j])
             if cur_score > best_avg_val_score:
                 best_avg_val_score = cur_score
                 best_params_index = j
@@ -290,20 +282,20 @@ def grid_search_cv(train_set, k, hyper_params_grid, fixed_length_for_time_series
             continue
 
         # Update best hyper-params
-        cur_hyper_params.insert(0, hyper_params_grid["epochs"][j])
+        cur_hyper_params.insert(0, hyper_params_grid["epochs"][best_params_index])
         best_hyper_params = cur_hyper_params
 
-        # Update avg_train_results, avg_val_results using the dictionaries corresponding to the cur best hyper-params
-        for measure in VALIDATION_PERFORMANCE_MEASURES:
+        # Update avg_train_results, avg_val_results using the dictionary corresponding to the cur best hyper-params
+        for measure in PERFORMANCE_MEASURES:
             avg_train_results[measure] = mean(cur_train_results[best_params_index][measure])
             avg_val_results[measure] = mean(cur_val_results[best_params_index][measure])
 
         # Find best model from the ones trained using the cur best hyper-parameters
-        best_model_index = find_best_individual_results(cur_val_results[best_params_index])
+        best_model_index = find_best_individual_results(score_measure, cur_val_results[best_params_index])
         best_model = cur_models[best_params_index][best_model_index]
 
         # Store cur best train_results, val_results
-        for measure in VALIDATION_PERFORMANCE_MEASURES:
+        for measure in PERFORMANCE_MEASURES:
             train_results[measure] = cur_train_results[best_params_index][measure][best_model_index]
             val_results[measure] = cur_val_results[best_params_index][measure][best_model_index]
 
@@ -321,7 +313,10 @@ def grid_search_cv(train_set, k, hyper_params_grid, fixed_length_for_time_series
     return best_model, train_results, val_results, best_hyper_params
 
 
-def nested_cv(dataset, k_outer, k_inner, hyper_params_grid, fixed_length_for_time_series, data_augmentation=None):
+# Seems good
+def nested_cv(dataset, k_outer, k_inner, hyper_params_grid, fixed_length_for_time_series, score_measure,
+              data_augmentation=None):
+
     # Stores the results for all of the best hyper-parameters found
     all_val_results = performance_measures_dict()
     all_train_results = performance_measures_dict()
@@ -333,6 +328,10 @@ def nested_cv(dataset, k_outer, k_inner, hyper_params_grid, fixed_length_for_tim
     # OUTER CV - split data into k_outer folds. Each fold is a ParticipantsData object
     outer_folds = split_dataset_into_k_folds(dataset, k=k_outer)
 
+    if score_measure not in PERFORMANCE_MEASURES:
+        print("\nInvalid score measure...")
+        return outer_folds, all_train_results, all_val_results, all_test_results, optimal_configurations
+
     for i in range(k_outer):
 
         train_set = join_folds(outer_folds[0:i] + outer_folds[i + 1:])
@@ -342,7 +341,8 @@ def nested_cv(dataset, k_outer, k_inner, hyper_params_grid, fixed_length_for_tim
 
         # GRID SEARCH
         model, train_results, val_results, best_hyper_params = \
-            grid_search_cv(train_set, k_inner, hyper_params_grid, fixed_length_for_time_series, data_augmentation)
+            grid_search_cv(train_set, k_inner, hyper_params_grid, fixed_length_for_time_series, score_measure,
+                           data_augmentation)
 
         # Prepare test set
         test_set = participants_storage_to_dictionary(test_set)
@@ -377,4 +377,3 @@ def nested_cv(dataset, k_outer, k_inner, hyper_params_grid, fixed_length_for_tim
         print("Done test " + str(i + 1) + "\\" + str(k_outer) + "...\n")
 
     return outer_folds, all_train_results, all_val_results, all_test_results, optimal_configurations
-

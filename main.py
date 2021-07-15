@@ -9,61 +9,63 @@ from statistics import mean, stdev
 from tabulate import tabulate
 from numpy.random import seed
 
-DATASET_PATH = r"C:\Users\uvern\Dropbox\My PC (LAPTOP-554U8A6N)\Documents\DSRI\Data\usneedle_data\SplitManually_Score20_OnlyBF"
+DATASET_PATH = r".\usneedle_data\SplitManually_Score20_OnlyBF"
 SEQUENCE_TYPES = ["NeedleTipToReference"]
 TIME_SERIES_LENGTH_FOR_MODEL = 2200  # Average time series length is ~258.61 , longest is 2191
 SLICE_WINDOW = 70  # originally 70
-RESULTS_FILE = "results_1.txt"
+SCORE_MEASURE = "f1-score"
+RESULTS_FILE = "f1score_1.txt"
 
 # Used k_outer = 5 , k_inner = 3 or 5
-K_OUTER = 2
-K_INNER = 2  # or 4 (so val and test set ~same size)
+K_OUTER = 5
+K_INNER = 3  # or 4 (so val and test set ~same size)
 
-# 3 * 3 * 3 * 3 = 81 combinations
+# 3 * 2 * 3 * 2 = 36 combinations
 # Note: Dictionaries in Python 3.7+ store keys in insertion order. This fact is used
-# HYPER_PARAMETERS_GRID = {
-#     "epochs":           list(range(100, 1001, 50)),             # originally 300 (don't tune, use callbacks?)
-#     "kernel-size":      [3, 5, 7],                              # originally 5 (7, 10?) ** avoid even numbers
-#     "filters":          [8, 16, 32],                            # originally 64
-#     "batch-size":       [32],                                   # originally 32
-#     "dropout-rate":     [0.0, 0.2, 0.5],                        # originally 0.5
-#     "learning-rate":    [0.0001, 0.0005, 0.001],                # originally 0.0001
-#     "regularizer":      [0, 0.05]                               # originally 0.05
-# }
-
 HYPER_PARAMETERS_GRID = {
-    "epochs":           list(range(100,1001,100)),           # list(range(100, 501, 50))
-    "kernel-size":      [10],                                # [3, 5, 10]
-    "filters":          [16],                                # [8, 16] or [64]
-    "batch-size":       [32],                                # originally 32
-    "dropout-rate":     [0.2],                               # originally 0.5
-    "learning-rate":    [0.0005],                            # [0.01, 0.02]
-    "regularizer":      [0.05]                               # originally 0.05
+    "epochs":           list(range(100, 1001, 100)),            # originally 300 (don't tune, use callbacks?)
+    "kernel-size":      [3, 5, 7],                              # originally 5 (7, 10?) ** avoid even numbers
+    "filters":          [8, 16],                                # originally 64
+    "batch-size":       [32],                                   # originally 32
+    "dropout-rate":     [0.5],                                  # originally 0.5
+    "learning-rate":    [0.0001, 0.0005, 0.001],                # originally 0.0001
+    "regularizer":      [0, 0.05]                               # originally 0.05
 }
+
+# HYPER_PARAMETERS_GRID = {
+#     "epochs":           list(range(10, 11, 100)),         # list(range(100, 501, 50))
+#     "kernel-size":      [7],                                # [3, 5, 10]
+#     "filters":          [16],                                # [8, 16] or [64]
+#     "batch-size":       [32],                                # originally 32
+#     "dropout-rate":     [0.5],                               # originally 0.5
+#     "learning-rate":    [0.0001],                            # [0.01, 0.02]
+#     "regularizer":      [0.05]                               # originally 0.05
+# }
 
 
 def main():
-    # os.environ["CUDA_VISIBLE_DEVICES"] = "-1"  # comment out to use GPU
+    os.environ["CUDA_VISIBLE_DEVICES"] = "-1"  # comment out to use GPU
     # seed(1)
 
     tic = time.perf_counter()
 
-    # Defines data augmentation to perform in inner / outer training sets
+    # Defines data augmentation to perform in inner training sets
     # data_augmentation = DataAugmentationController(
     #     instructions=[
     #         BalanceDataset(technique=SmoteBasedWDBA(), augment_synthetic=False),
-    #         # IncreaseDatasetProportionally(technique=Jittering(), increase_factor=2, augment_synthetic=False),
+    #         # IncreaseDatasetProportionally(technique=SmoteBasedWDBA(), increase_factor=1.5, augment_synthetic=False),
+    #         # IncreaseDatasetProportionally(technique=Jittering(), increase_factor=3, augment_synthetic=True)
     #     ]
     # )
 
     dataset = load_dataset(DATASET_PATH, SEQUENCE_TYPES)
     outer_folds, all_best_train_results, all_best_val_results, all_test_results, optimal_configurations \
-        = nested_cv(dataset, K_OUTER, K_INNER, HYPER_PARAMETERS_GRID, TIME_SERIES_LENGTH_FOR_MODEL)
+        = nested_cv(dataset, K_OUTER, K_INNER, HYPER_PARAMETERS_GRID, TIME_SERIES_LENGTH_FOR_MODEL, SCORE_MEASURE)
 
     toc = time.perf_counter()
 
     # Print test results to both the terminal and the specified file
-    sys.stdout = Transcript(RESULTS_FILE)
+    # sys.stdout = Transcript(RESULTS_FILE)
 
     print("\n=> Results of running nested cv")
     print("   ----------------------------")
@@ -76,6 +78,7 @@ def main():
     print(HYPER_PARAMETERS_GRID)
 
     print("\nTime series length for model:", TIME_SERIES_LENGTH_FOR_MODEL)
+    print("\nScore measure:", SCORE_MEASURE)
     print("\nk-outer:", K_OUTER)
     print("\nk-inner:", K_INNER, "\n\n")
 
@@ -177,8 +180,8 @@ def main():
     print("\n\n")
 
     # Returns print functionality back to normal
-    sys.stdout.logfile.close()
-    sys.stdout = sys.stdout.terminal
+    # sys.stdout.logfile.close()
+    # sys.stdout = sys.stdout.terminal
 
 
 main()

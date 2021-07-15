@@ -1,9 +1,10 @@
 import sys
 import math
 import random
+import numpy as np
 from data_augmentation import jittering, smote_based_wDBA
 from enum import Enum
-from utility.conversion_methods import join_dataset_dictionaries
+from utility.conversion_methods import join_dataset_dictionaries, fix_rotation_matrices, list_to_matrix
 
 DATA_AUGMENTATION_TECHNIQUES = ["smote_based_wdba", "jittering"]
 
@@ -267,6 +268,22 @@ class DataAugmentationController:
         )
         for instruction in self.instructions:
             synthetic_dataset = instruction.execute(original_dataset, synthetic_dataset)
+
+        # print("Matrix multiplication before:")
+        # product = np.dot(list_to_matrix(synthetic_dataset["Novices"]["IP"][0][0])[0:3, 0:3],
+        #                  list_to_matrix(synthetic_dataset["Novices"]["IP"][0][0])[0:3, 0:3].transpose())
+        # np.savetxt(sys.stdout, product, '%.5f')
+
+        # Fix all rotation matrices, for all time series
+        for skill_level in synthetic_dataset:
+            for surgery_type in synthetic_dataset[skill_level]:
+                for i in range(len(synthetic_dataset[skill_level][surgery_type])):
+                    fix_rotation_matrices(synthetic_dataset[skill_level][surgery_type][i])
+
+        # print("Matrix multiplication after:")
+        # product = np.dot(list_to_matrix(synthetic_dataset["Novices"]["IP"][0][0])[0:3, 0:3],
+        #                  list_to_matrix(synthetic_dataset["Novices"]["IP"][0][0])[0:3, 0:3].transpose())
+        # np.savetxt(sys.stdout, product, '%.5f')
 
         return synthetic_dataset
 
