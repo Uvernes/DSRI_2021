@@ -22,7 +22,7 @@ def generate_random_transform_matrix(rotation_magnitude, translation_magnitude):
 
     return random_transform_matrix
 
-
+#
 def apply_jittering_to_single_time_series(time_series, rotation_magnitude=1, translation_magnitude=1):
     """
     Parameters
@@ -68,6 +68,7 @@ def apply_jittering_to_dataset(dataset, num_jitters_per_sample, rotation_magnitu
 
 
 # synthetic_amount refers to the number of synthetic samples to create
+# translation_magnitude = 1.4, rotation_magnitude = 0.0087
 def jittering_specified_amount(dataset, synthetic_amount, rotation_magnitude=1, translation_magnitude=1, shuffle=True):
     synthetic_samples = []
     if synthetic_amount <= 0:

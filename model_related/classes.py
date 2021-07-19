@@ -223,6 +223,7 @@ class BalanceDataset(DataAugmentationInstruction):
 
 # Novices IP, Novices OOP, Experts IP, Experts OOP, which make up the dataset, are all increased by the given factor
 # independently.
+# NOTE: ** Increase is relative to the size of the enhanced set, not the original dataset
 class IncreaseDatasetProportionally(DataAugmentationInstruction):
 
     def __init__(self, technique, increase_factor, augment_synthetic=False):
@@ -243,6 +244,66 @@ class IncreaseDatasetProportionally(DataAugmentationInstruction):
             for surgery_type in ["IP", "OOP"]:
                 desired_size = round(self.increase_factor * len(enhanced_set[skill_level][surgery_type]))
                 synthetic_amount = desired_size - len(enhanced_set[skill_level][surgery_type])
+                synthetic_dataset[skill_level][surgery_type] += \
+                    self.technique.execute(set_used_for_augmentation[skill_level][surgery_type], synthetic_amount)
+
+        return synthetic_dataset
+
+
+# Novices IP, Novices OOP, Experts IP, Experts OOP, which make up the dataset, are all increased by aprx. the same number
+# of synthetic samples such that the dataset reaches the required size, which is len(original_dataset) * increase_factor.
+# -This means increase is relative to size of the original dataset
+# NOTE: the resulting enhanced set may be slightly imbalanced
+#  e.g perhaps 4 Novices IP are required and 3 for each of the other types
+# ** NOTE: This method only works well for increase_factor >= 2 . If it's less, increase_factor may already be exceeded
+# when samples are first balanced
+
+class IncreaseDatasetBalanced(DataAugmentationInstruction):
+
+    def __init__(self, technique, increase_factor, augment_synthetic=False):
+
+        super().__init__(technique, augment_synthetic)
+        self.increase_factor = increase_factor
+        self.balance_instruction = BalanceDataset(technique, augment_synthetic)
+
+    def execute(self, original_dataset, synthetic_dataset):
+
+        if self.increase_factor < 2:
+            print("Note: Increase factor must be >= 2. No data augmentation performed... (otherwise factor is overshot when balancing)")
+            return synthetic_dataset
+
+        # First balance dataset
+        synthetic_dataset = self.balance_instruction.execute(original_dataset, synthetic_dataset)
+
+        enhanced_set = join_dataset_dictionaries(original_dataset, synthetic_dataset)
+        set_used_for_augmentation = enhanced_set if self.augment_synthetic else original_dataset
+
+        # Find number of surgeries in original and enhanced datasets
+        original_size = 0
+        cur_size = 0
+        for skill_level in ["Novices", "Experts"]:
+            for surgery_type in ["IP", "OOP"]:
+                original_size += len(original_dataset[skill_level][surgery_type])
+                cur_size += len(enhanced_set[skill_level][surgery_type])
+
+        desired_size = round(self.increase_factor * original_size)
+
+        synthetic_samples_required = desired_size - cur_size
+
+        if synthetic_samples_required <= 0:
+            return synthetic_dataset
+
+        # Increase each division separately, all by aprx. the same amount
+        # After attempting to split data augmentation evenly, may require 1 more of a certain division(s)
+        # then others. This occurs if desired_size is not a multiple of 4
+        extra_samples_required = synthetic_samples_required % 4
+        for skill_level in ["Novices", "Experts"]:
+            for surgery_type in ["IP", "OOP"]:
+                synthetic_amount = synthetic_samples_required // 4
+                if extra_samples_required > 0:
+                    synthetic_amount += 1
+                    extra_samples_required -= 1
+
                 synthetic_dataset[skill_level][surgery_type] += \
                     self.technique.execute(set_used_for_augmentation[skill_level][surgery_type], synthetic_amount)
 

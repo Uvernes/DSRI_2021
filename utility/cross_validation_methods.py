@@ -142,7 +142,8 @@ def find_best_individual_results(score_measure, results):
 
 # i.e non-nested cv. Computes all performance measures of interest, for each fold, for various # of epochs
 # Seems good
-def regular_cv(train_set, k, hyper_params, epochs_list, fixed_length_for_time_series, data_augmentation, inner_folds=None):
+def regular_cv(train_sets, val_sets, k, hyper_params, epochs_list):
+
     # We have E validation results dictionaries, where E = len(epochs_list). Same for training results
     all_train_results = []
     all_val_results = []
@@ -156,46 +157,46 @@ def regular_cv(train_set, k, hyper_params, epochs_list, fixed_length_for_time_se
         all_train_results.append(performance_measures_dict())
         models.append([])
 
-    if inner_folds is None:
-        inner_folds = split_dataset_into_k_folds(train_set, k)
-
     for i in range(k):
 
-        inner_train_set = join_folds(inner_folds[0:i] + inner_folds[i + 1:])
-        inner_val_set = inner_folds[i]
+        inner_train_set = train_sets[i]
+        inner_val_set = val_sets[i]
+        # inner_train_set = join_folds(inner_folds[0:i] + inner_folds[i + 1:])
+        # inner_val_set = inner_folds[i]
 
         # print("Inner training set surgeries:", inner_train_set.surgeries_stats["surgeries"])
         # print("Inner validation set surgeries:", inner_val_set.surgeries_stats["surgeries"])
 
         # Convert sets (ParticipantsStorage objects) into dictionaries of time series.
         # Time series of different sequence types for the same surgery are concatenated at each timestamp
-        inner_train_set = participants_storage_to_dictionary(inner_train_set)
-        inner_val_set = participants_storage_to_dictionary(inner_val_set)
+        # inner_train_set = participants_storage_to_dictionary(inner_train_set)
+        # inner_val_set = participants_storage_to_dictionary(inner_val_set)
 
         # print("Number of novices IP, OOP, experts IP, OOP, respectively in inner training set:")
         # print(len(inner_train_set["Novices"]["OOP"]), "|", len(inner_train_set["Novices"]["IP"]), "|",
         #       len(inner_train_set["Experts"]["IP"]), "|", len(inner_train_set["Experts"]["OOP"]))
 
         # ------- Apply data augmentation to training set here (potentially to val set too?) ------ #
-        if data_augmentation is not None:
-            # inner_train_set enhanced
-            synthetic_dataset = data_augmentation.execute(inner_train_set)
-            inner_train_set = join_dataset_dictionaries(inner_train_set, synthetic_dataset)
+        # if data_augmentation is not None:
+        #     # inner_train_set enhanced
+        #     synthetic_dataset = data_augmentation.execute(inner_train_set)
+        #     inner_train_set = join_dataset_dictionaries(inner_train_set, synthetic_dataset)
 
         # changes all time series into the format expected by model.fit()
-        change_format_of_time_series(inner_train_set)
-        change_format_of_time_series(inner_val_set)
+        # change_format_of_time_series(inner_train_set)
+        # change_format_of_time_series(inner_val_set)
 
         # pad both time series (later, address time series longer than fixed_length)
         # Also, each time series becomes an np array
-        zero_pad_time_series(inner_train_set, fixed_length=fixed_length_for_time_series)
-        zero_pad_time_series(inner_val_set, fixed_length=fixed_length_for_time_series)
+        # zero_pad_time_series(inner_train_set, fixed_length=fixed_length_for_time_series)
+        # zero_pad_time_series(inner_val_set, fixed_length=fixed_length_for_time_series)
 
         # LATER - perform window slicing
 
         # Sets are tuples with 2 elements (np arrays). 1st element stores the data, 2nd stores the labels
-        inner_train_set = ut.split_set_into_x_and_y(inner_train_set)
-        inner_val_set = ut.split_set_into_x_and_y(inner_val_set)
+        # inner_train_set = ut.split_set_into_x_and_y(inner_train_set)
+        # inner_val_set = ut.split_set_into_x_and_y(inner_val_set)
+
         model = None
         for j in range(len(epochs_list)):
             if j == 0:
@@ -208,7 +209,7 @@ def regular_cv(train_set, k, hyper_params, epochs_list, fixed_length_for_time_se
                 hyper_params["epochs"] = epochs_list[j] - epochs_list[j - 1]
                 model.fit(x=inner_train_set[0], y=inner_train_set[1], batch_size=hyper_params["batch-size"],
                           epochs=hyper_params["epochs"], verbose=0)
-            print("Number of epochs trained:", hyper_params["epochs"])
+            # print("Number of epochs trained:", hyper_params["epochs"])
 
             # test on val set and record results (in order val sets are tested)
             # Done for each epochs value
@@ -247,8 +248,55 @@ def grid_search_cv(train_set, k, hyper_params_grid, fixed_length_for_time_series
     best_hyper_params = None
     best_model = None
 
-    # Same folds used in inner cv by all hyper-param combinations
+    # Same folds (i.e inner training and val sets) used in inner cv by all hyper-param combinations.
     inner_folds = split_dataset_into_k_folds(train_set, k)
+    train_sets = []
+    val_sets = []
+    for i in range(k):
+        cur_train_set = join_folds(inner_folds[0:i] + inner_folds[i + 1:])
+        cur_val_set = inner_folds[i]
+
+        # Convert sets (ParticipantsStorage objects) into dictionaries of time series.
+        # Time series of different sequence types for the same surgery are concatenated at each timestamp
+        cur_train_set = participants_storage_to_dictionary(cur_train_set)
+        cur_val_set = participants_storage_to_dictionary(cur_val_set)
+
+        print("\nPrev inner train set size:")
+        for skill_level in ["Novices", "Experts"]:
+            for surgery_type in ["IP", "OOP"]:
+                print("Number of", surgery_type, skill_level + ":",
+                      len(cur_train_set[skill_level][surgery_type]))
+
+        # Apply all data augmentation beforehand (both for consistency and efficiency)
+        # Also preprocessing of data (factor out later)
+        if data_augmentation is not None:
+            # inner_train_set enhanced
+            synthetic_dataset = data_augmentation.execute(cur_train_set)
+            cur_train_set = join_dataset_dictionaries(cur_train_set, synthetic_dataset)
+
+        print("\nNew inner train set size:")
+        for skill_level in ["Novices", "Experts"]:
+            for surgery_type in ["IP", "OOP"]:
+                print("Number of", surgery_type, skill_level + ":",
+                      len(cur_train_set[skill_level][surgery_type]))
+
+        # changes all time series into the format expected by model.fit()
+        change_format_of_time_series(cur_train_set)
+        change_format_of_time_series(cur_val_set)
+
+        # pad both time series (later, address time series longer than fixed_length)
+        # Also, each time series becomes an np array
+        zero_pad_time_series(cur_train_set, fixed_length=fixed_length_for_time_series)
+        zero_pad_time_series(cur_val_set, fixed_length=fixed_length_for_time_series)
+
+        # LATER - perform window slicing
+
+        # Sets are tuples with 2 elements (np arrays). 1st element stores the data, 2nd stores the labels
+        cur_train_set = ut.split_set_into_x_and_y(cur_train_set)
+        cur_val_set = ut.split_set_into_x_and_y(cur_val_set)
+
+        train_sets.append(cur_train_set)
+        val_sets.append(cur_val_set)
 
     for i in range(len(hyper_param_combinations)):
 
@@ -266,8 +314,7 @@ def grid_search_cv(train_set, k, hyper_params_grid, fixed_length_for_time_series
         # epochs values in the grid passed in (i.e a list of E dictionaries)
         # Note: (K_INNER * E) models are returned.
         cur_train_results, cur_val_results, cur_models = \
-            regular_cv(train_set, k, hyper_params_dict, hyper_params_grid["epochs"], fixed_length_for_time_series,
-                       data_augmentation, inner_folds)
+            regular_cv(train_sets, val_sets, k, hyper_params_dict, hyper_params_grid["epochs"])
 
         best_params_index = None
         # Check if there is any dictionary in cur_val_results which has a better avg val score than the current best

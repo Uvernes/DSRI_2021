@@ -10,6 +10,7 @@ from tabulate import tabulate
 from numpy.random import seed
 
 DATASET_PATH = r".\usneedle_data\SplitManually_Score20_OnlyBF"
+# DATASET_PATH = r"/home/uvernes/projects/def-holden/uvernes/USNeedleClassification/usneedle_data/SplitManually_Score20_OnlyBF"
 SEQUENCE_TYPES = ["NeedleTipToReference"]
 TIME_SERIES_LENGTH_FOR_MODEL = 2200  # Average time series length is ~258.61 , longest is 2191
 SLICE_WINDOW = 70  # originally 70
@@ -20,20 +21,20 @@ RESULTS_FILE = "f1score_1.txt"
 K_OUTER = 5
 K_INNER = 3  # or 4 (so val and test set ~same size)
 
-# 3 * 2 * 3 * 2 = 36 combinations
+# 3 * 2 * 3 * 2 * 2 = 72 combinations
 # Note: Dictionaries in Python 3.7+ store keys in insertion order. This fact is used
 HYPER_PARAMETERS_GRID = {
-    "epochs":           list(range(100, 1001, 100)),            # originally 300 (don't tune, use callbacks?)
+    "epochs":           list(range(25, 1001, 25)),            # originally 300 (don't tune, use callbacks?)
     "kernel-size":      [3, 5, 7],                              # originally 5 (7, 10?) ** avoid even numbers
     "filters":          [8, 16],                                # originally 64
     "batch-size":       [32],                                   # originally 32
-    "dropout-rate":     [0.5],                                  # originally 0.5
+    "dropout-rate":     [0, 0.5],                               # originally 0.5
     "learning-rate":    [0.0001, 0.0005, 0.001],                # originally 0.0001
     "regularizer":      [0, 0.05]                               # originally 0.05
 }
 
 # HYPER_PARAMETERS_GRID = {
-#     "epochs":           list(range(10, 11, 100)),         # list(range(100, 501, 50))
+#     "epochs":           list(range(25, 101, 25)),         # list(range(100, 501, 50))
 #     "kernel-size":      [7],                                # [3, 5, 10]
 #     "filters":          [16],                                # [8, 16] or [64]
 #     "batch-size":       [32],                                # originally 32
@@ -44,23 +45,22 @@ HYPER_PARAMETERS_GRID = {
 
 
 def main():
-    os.environ["CUDA_VISIBLE_DEVICES"] = "-1"  # comment out to use GPU
+    # os.environ["CUDA_VISIBLE_DEVICES"] = "-1"  # comment out to use GPU
     # seed(1)
 
     tic = time.perf_counter()
 
     # Defines data augmentation to perform in inner training sets
-    # data_augmentation = DataAugmentationController(
-    #     instructions=[
-    #         BalanceDataset(technique=SmoteBasedWDBA(), augment_synthetic=False),
-    #         # IncreaseDatasetProportionally(technique=SmoteBasedWDBA(), increase_factor=1.5, augment_synthetic=False),
-    #         # IncreaseDatasetProportionally(technique=Jittering(), increase_factor=3, augment_synthetic=True)
-    #     ]
-    # )
+    data_augmentation = DataAugmentationController(
+        instructions=[
+            IncreaseDatasetBalanced(technique=SmoteBasedWDBA(), increase_factor=2, augment_synthetic=False),
+        ]
+    )
 
     dataset = load_dataset(DATASET_PATH, SEQUENCE_TYPES)
     outer_folds, all_best_train_results, all_best_val_results, all_test_results, optimal_configurations \
-        = nested_cv(dataset, K_OUTER, K_INNER, HYPER_PARAMETERS_GRID, TIME_SERIES_LENGTH_FOR_MODEL, SCORE_MEASURE)
+        = nested_cv(dataset, K_OUTER, K_INNER, HYPER_PARAMETERS_GRID, TIME_SERIES_LENGTH_FOR_MODEL, SCORE_MEASURE,
+                    data_augmentation)
 
     toc = time.perf_counter()
 
@@ -91,7 +91,7 @@ def main():
                    headers=["Performance measure", "All training results - mean", "All validation results - mean",
                             "Tests - mean"]))
 
-    # Print std of results
+    # Print stdev of results
     print("\n")
     lists_to_print = []
     for performance_measure in all_test_results:
