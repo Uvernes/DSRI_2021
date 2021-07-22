@@ -293,7 +293,6 @@ def write_dataset_to_mha_files(dataset, timestamps_set, sequence_type, directory
             os.makedirs(new_dir)
             write_time_series_to_mha_file(dataset[i], timestamps_set[i], sequence_type, new_dir)
 
-
 # ----------- Testing ------------ #
 
 # # Reading in a single series

@@ -18,8 +18,8 @@ SCORE_MEASURE = "f1-score"
 RESULTS_FILE = "f1score_1.txt"
 
 # Used k_outer = 5 , k_inner = 3 or 5
-K_OUTER = 5
-K_INNER = 3  # or 4 (so val and test set ~same size)
+K_OUTER = 2
+K_INNER = 2  # or 4 (so val and test set ~same size)
 
 # 3 * 2 * 3 * 2 * 2 = 72 combinations
 # Note: Dictionaries in Python 3.7+ store keys in insertion order. This fact is used
@@ -33,15 +33,15 @@ HYPER_PARAMETERS_GRID = {
     "regularizer":      [0, 0.05]                               # originally 0.05
 }
 
-# HYPER_PARAMETERS_GRID = {
-#     "epochs":           list(range(25, 101, 25)),         # list(range(100, 501, 50))
-#     "kernel-size":      [7],                                # [3, 5, 10]
-#     "filters":          [16],                                # [8, 16] or [64]
-#     "batch-size":       [32],                                # originally 32
-#     "dropout-rate":     [0.5],                               # originally 0.5
-#     "learning-rate":    [0.0001],                            # [0.01, 0.02]
-#     "regularizer":      [0.05]                               # originally 0.05
-# }
+HYPER_PARAMETERS_GRID = {
+    "epochs":           list(range(25, 301, 25)),         # list(range(100, 501, 50))
+    "kernel-size":      [7],                                # [3, 5, 10]
+    "filters":          [16],                                # [8, 16] or [64]
+    "batch-size":       [32],                                # originally 32
+    "dropout-rate":     [0.5],                               # originally 0.5
+    "learning-rate":    [0.0001],                            # [0.01, 0.02]
+    "regularizer":      [0.05]                               # originally 0.05
+}
 
 
 def main():
@@ -53,7 +53,7 @@ def main():
     # Defines data augmentation to perform in inner training sets
     data_augmentation = DataAugmentationController(
         instructions=[
-            IncreaseDatasetBalanced(technique=SmoteBasedWDBA(), increase_factor=2, augment_synthetic=False),
+            IncreaseDatasetBalanced(technique=WindowSlicing(window_slice_prop=0.9), increase_factor=2, augment_synthetic=False),
         ]
     )
 

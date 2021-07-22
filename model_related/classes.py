@@ -2,10 +2,12 @@ import sys
 import math
 import random
 import numpy as np
-from data_augmentation import jittering, smote_based_wDBA
+from tabulate import tabulate
+from data_augmentation import jittering, smote_based_wDBA, window_slicing
 from enum import Enum
 from utility.conversion_methods import join_dataset_dictionaries, fix_rotation_matrices, list_to_matrix
 
+PERFORMANCE_MEASURES = ["Binary crossentropy loss", "Binary accuracy", "AUC", "f1-score", "Precision", "Recall"]
 DATA_AUGMENTATION_TECHNIQUES = ["smote_based_wdba", "jittering"]
 
 
@@ -164,6 +166,15 @@ class SmoteBasedWDBA:
     def execute(self, dataset, synthetic_amount):
         return smote_based_wDBA.smote_based_weighted_dba_specified_amount(
             dataset, synthetic_amount, self.k)
+
+
+class WindowSlicing:
+
+    def __init__(self, window_slice_prop=0.9):
+        self.window_slice_prop = window_slice_prop
+
+    def execute(self, dataset, synthetic_amount):
+        return window_slicing.window_slicing_specified_amount(dataset, synthetic_amount, self.window_slice_prop)
 
 
 class DataAugmentationInstruction:
@@ -347,6 +358,66 @@ class DataAugmentationController:
         # np.savetxt(sys.stdout, product, '%.5f')
 
         return synthetic_dataset
+
+
+class Results:
+
+    def __init__(self):
+
+        self.averages = dict(
+            training=dict(),
+            validation=dict(),
+            test=dict()
+        )
+        self.stddevs = dict(
+            training=dict(),
+            validation=dict(),
+            test=dict()
+        )
+
+    def __str__(self):
+
+        # Averages
+        lists_to_print = []
+        for performance_measure in PERFORMANCE_MEASURES:
+            lists_to_print.append([performance_measure, self.averages["training"][performance_measure],
+                                   self.averages["validation"][performance_measure],
+                                   self.averages["test"][performance_measure]])
+
+        averages_table = tabulate(tabular_data=lists_to_print,
+                                  headers=["Performance measure", "All training results - mean",
+                                           "All validation results - mean", "Tests - mean"])
+        # Stddevs
+        lists_to_print = []
+        for performance_measure in PERFORMANCE_MEASURES:
+            lists_to_print.append([performance_measure, self.stddevs["training"][performance_measure],
+                                   self.stddevs["validation"][performance_measure],
+                                   self.stddevs["test"][performance_measure]])
+
+        stddevs_table = tabulate(tabular_data=lists_to_print,
+                                 headers=["Performance measure", "All training results - stddev",
+                                          "All validation results - stddev", "Tests - stddev"])
+
+        return averages_table + "\n\n" + stddevs_table + "\n"
+
+    @staticmethod
+    def create_averaged_results_object(all_result_objects):
+
+        # Initializing averaged results object
+        averaged_results = Results()
+        for set in averaged_results.averages:
+            for performance_measure in PERFORMANCE_MEASURES:
+                averaged_results.averages[set][performance_measure] = 0
+                averaged_results.stddevs[set][performance_measure] = 0
+
+        for single_results in all_result_objects:
+            for set in averaged_results.averages:
+                for performance_measure in PERFORMANCE_MEASURES:
+                    averaged_results.averages[set][performance_measure] += \
+                        single_results.averages[set][performance_measure] / len(all_result_objects)
+                    averaged_results.stddevs[set][performance_measure] += \
+                        single_results.stddevs[set][performance_measure] / len(all_result_objects)
+        return averaged_results
 
 
 class Transcript(object):
